@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -71,11 +72,11 @@ public class DiscoveryParser extends OnvifParser<List<Device>> {
                     String type = getXpp().getText();
 
                     DiscoveryType discoveryType = null;
-                    try {
-                        discoveryType = DiscoveryType.valueOf(type.substring(3).toUpperCase());
-                    } catch (Exception e) {
-                        // failed to parse type
-                        e.printStackTrace();
+                    for (DiscoveryType t : DiscoveryType.values()) {
+                        if (type.toLowerCase().contains(t.type.toLowerCase())) {
+                            discoveryType = t;
+                            break;
+                        }
                     }
 
                     if (mode.equals(DiscoveryMode.ONVIF) && discoveryType != null) {

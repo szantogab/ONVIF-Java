@@ -36,23 +36,23 @@ public class OnvifExecutor {
     private MediaType reqBodyType;
     private RequestBody reqBody;
 
-    private Credentials credentials;
+    private final Credentials credentials = new Credentials("", "");
     private OnvifResponseListener onvifResponseListener;
 
     //Constructors
 
     OnvifExecutor(OnvifResponseListener onvifResponseListener) {
         this.onvifResponseListener = onvifResponseListener;
-        credentials = new Credentials("username", "password");
+
         DigestAuthenticator authenticator = new DigestAuthenticator(credentials);
         Map<String, CachingAuthenticator> authCache = new ConcurrentHashMap<>();
 
         client = new OkHttpClient.Builder()
-                .connectTimeout(10000, TimeUnit.SECONDS)
-                .writeTimeout(100, TimeUnit.SECONDS)
-                .readTimeout(10000, TimeUnit.SECONDS)
-                .authenticator(new CachingAuthenticatorDecorator(authenticator, authCache))
+                .connectTimeout(3, TimeUnit.SECONDS)
+                .writeTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
                 .addInterceptor(new AuthenticationCacheInterceptor(authCache))
+                .authenticator(new CachingAuthenticatorDecorator(authenticator, authCache))
                 .build();
 
         reqBodyType = MediaType.parse("application/soap+xml; charset=utf-8;");
@@ -69,7 +69,7 @@ public class OnvifExecutor {
     void sendRequest(OnvifDevice device, OnvifRequest<?> request) {
         credentials.setUserName(device.getUsername());
         credentials.setPassword(device.getPassword());
-        reqBody = RequestBody.create(reqBodyType, OnvifXMLBuilder.getSoapHeader() + request.getXml() + OnvifXMLBuilder.getEnvelopeEnd());
+        reqBody = RequestBody.create(reqBodyType, OnvifXMLBuilder.getSoapHeader(credentials) + request.getXml() + OnvifXMLBuilder.getEnvelopeEnd());
         performXmlRequest(device, request, buildOnvifRequest(device, request));
     }
 
