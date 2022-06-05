@@ -17,5 +17,7 @@ fun main() = runBlocking {
     device.ptzAbsoluteMove(mediaProfiles.first().token, 0.1, 0.0, 1.0)
     device.ptzStop(mediaProfiles.first().token)
 
-    val info2 = OnvifDevice("192.168.0.119:8888", "admin", "pass").getInformation()
+    val info2 = OnvifDevice("192.168.0.119:8000", "admin", "pass").getInformation()
+
+    Unit
 }
