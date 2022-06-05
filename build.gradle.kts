@@ -1,6 +1,5 @@
 plugins {
     kotlin("jvm") version "1.3.72"
-    id("com.jfrog.bintray") version "1.8.5"
     `maven-publish`
     publishing
     maven
@@ -12,7 +11,7 @@ repositories {
 }
 
 group = "be.teletask.onvif"
-version = "1.1.5"
+version = "1.1.11"
 
 dependencies {
     implementation(kotlin("stdlib-jdk8"))
@@ -23,34 +22,59 @@ dependencies {
     implementation("org.jetbrains.kotlinx", "kotlinx-coroutines-core", "1.3.4")
 }
 
-publishing {
-    publications {
-        register<MavenPublication>("mavenJava") {
-            from(components["java"])
-        }
-    }
-}
-
-bintray {
-    user = System.getenv("bintrayUser")
-    key = System.getenv("bintrayApiKey")
-    setPublications("mavenJava")
-    with(pkg) {
-        repo = "maven"
-        name = "onvif-java"
-        desc = "ONVIF client library for Java and Kotlin"
-        userOrg = "szantogab"
-        setLicenses("MIT")
-        vcsUrl = "https://github.com/szantogab/ONVIF-Java"
-        with(version) {
-            name = project.version.toString()
-        }
-    }
-}
-
 val sourcesJar by tasks.creating(Jar::class) {
     classifier = "sources"
     from(sourceSets["main"].allSource)
 }
 
 artifacts.add("archives", sourcesJar)
+
+publishing {
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/szantogab/ONVIF-Java")
+            credentials {
+                username = project.findProperty("gpr.user") as String ?: System.getenv("GITHUB_USERNAME")
+                password = project.findProperty("gpr.key") as String ?: System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
+    publications {
+        register("gprRelease", MavenPublication::class) {
+            groupId = "com.github.szantogab"
+            artifactId = "onvif-java"
+            version = project.version as String
+
+            from(components["java"])
+
+            artifact(sourcesJar)
+
+            pom {
+                packaging = "jar"
+                name.set("ONVIF-Java")
+                description.set("ONVIF support for Java and Kotlin")
+                url.set("https://github.com/szantogab/ONVIF-Java")
+                /*scm {
+                    url.set(myGithubHttpUrl)
+                }
+                issueManagement {
+                    url.set(myGithubIssueTrackerUrl)
+                }*/
+/*                licenses {
+                    license {
+                        name.set(myLicense)
+                        url.set(myLicenseUrl)
+                    }
+                }*/
+                developers {
+                    developer {
+                        id.set("szantogab")
+                        name.set("Gabor Szanto")
+                    }
+                }
+            }
+
+        }
+    }
+}
