@@ -7,6 +7,7 @@ import com.burgstaller.okhttp.digest.DigestAuthenticator;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -35,7 +36,7 @@ public class OnvifXMLBuilder {
                 byte[] bytes = new byte[20];
                 new Random().nextBytes(bytes);
                 nonce = Base64.getEncoder().encodeToString(bytes);
-                created = ZonedDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+                created = Instant.now().toString(); // Timestamp in UTC formatted like: 2022-11-05T12:18:19.600710800Z
 
                 byte[] createdByteArray = created.getBytes(StandardCharsets.UTF_8);
                 byte[] passwordByteArray = cred.getPassword().getBytes(StandardCharsets.UTF_8);
