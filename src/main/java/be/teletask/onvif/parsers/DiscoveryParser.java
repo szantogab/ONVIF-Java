@@ -119,7 +119,7 @@ public class DiscoveryParser extends OnvifParser<List<Device>> {
 
         for (String address : uris) {
             final URI url = URI.create(address);
-            final String parsedAddress = url.getScheme() + "://" + url.getHost() + (url.getPort() == 0 ? "" : ":" + url.getPort());
+            final String parsedAddress = url.getScheme() + "://" + url.getHost() + (url.getPort() == 0 || url.getPort() == -1 ? "" : ":" + url.getPort());
 
             OnvifDevice device = new OnvifDevice(parsedAddress);
             if (uriAndScopes.getScopes() != null) {
