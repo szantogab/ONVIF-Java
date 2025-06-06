@@ -1,8 +1,6 @@
 plugins {
     kotlin("jvm") version "1.3.72"
     `maven-publish`
-    publishing
-    maven
 }
 
 repositories {
@@ -11,7 +9,7 @@ repositories {
 }
 
 group = "be.teletask.onvif"
-version = "1.1.13"
+version = "1.1.14"
 
 dependencies {
     implementation(kotlin("stdlib-jdk8"))
