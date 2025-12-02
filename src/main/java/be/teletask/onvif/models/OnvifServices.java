@@ -12,12 +12,16 @@ public class OnvifServices {
     public static final String ONVIF_PATH_DEVICE_INFORMATION = "/onvif/device_service";
     public static final String ONVIF_PATH_PROFILES = "/onvif/device_service";
     public static final String ONVIF_PATH_STREAM_URI = "/onvif/device_service";
+    public static final String ONVIF_PATH_ANALYTICS = "/onvif/analytics_service";
+    public static final String ONVIF_PATH_EVENTS = "/onvif/event_service";
 
     //Attributes
     private String servicesPath = ONVIF_PATH_SERVICES;
     private String deviceInformationPath = ONVIF_PATH_DEVICE_INFORMATION;
     private String profilesPath = ONVIF_PATH_PROFILES;
     private String streamURIPath = ONVIF_PATH_STREAM_URI;
+    private String analyticsPath = ONVIF_PATH_ANALYTICS;
+    private String eventsPath = ONVIF_PATH_EVENTS;
 
     //Constructors
     public OnvifServices() {
@@ -55,6 +59,22 @@ public class OnvifServices {
 
     public void setStreamURIPath(String streamURIPath) {
         this.streamURIPath = streamURIPath;
+    }
+
+    public String getAnalyticsPath() {
+        return analyticsPath;
+    }
+
+    public void setAnalyticsPath(String analyticsPath) {
+        this.analyticsPath = analyticsPath;
+    }
+
+    public String getEventsPath() {
+        return eventsPath;
+    }
+
+    public void setEventsPath(String eventsPath) {
+        this.eventsPath = eventsPath;
     }
 
 }

@@ -1,15 +1,11 @@
 package be.teletask.onvif;
 
-import be.teletask.onvif.listeners.*;
-import be.teletask.onvif.models.OnvifDevice;
-import be.teletask.onvif.models.OnvifDeviceInformation;
-import be.teletask.onvif.models.OnvifMediaProfile;
-import be.teletask.onvif.models.OnvifServices;
+import be.teletask.onvif.listeners.OnvifResponseListener;
+import be.teletask.onvif.models.*;
 import be.teletask.onvif.requests.*;
 import be.teletask.onvif.responses.OnvifResponse;
 
 import java.util.List;
-
 
 /**
  * Created by Tomas Verhelst on 03/09/2018.
@@ -84,6 +80,120 @@ public class OnvifManager implements OnvifResponseListener {
         executor.sendRequest(device, request);
     }
 
+    // Motion Detection & Events
+
+    // Motion Detection Methods
+
+    /**
+     * Lekérdezi a mozgásérzékelési konfigurációt
+     * @param device ONVIF eszköz
+     * @param listener válasz listener
+     */
+    public void getMotionDetectionConfiguration(OnvifDevice device, OnvifRequest.Listener<OnvifMotionDetection> listener) {
+        final GetMotionDetectionConfigurationRequest request = new GetMotionDetectionConfigurationRequest(listener);
+        executor.sendRequest(device, request);
+    }
+
+    /**
+     * Beállítja a mozgásérzékelési konfigurációt
+     * @param device ONVIF eszköz
+     * @param motionDetection mozgásérzékelési konfiguráció
+     * @param listener válasz listener
+     */
+    public void setMotionDetectionConfiguration(OnvifDevice device, OnvifMotionDetection motionDetection, OnvifRequest.Listener<Void> listener) {
+        final SetMotionDetectionConfigurationRequest request = new SetMotionDetectionConfigurationRequest(motionDetection, listener);
+        executor.sendRequest(device, request);
+    }
+
+    /**
+     * Lekérdezi az elérhető analytics engine-eket
+     * @param device ONVIF eszköz
+     * @param listener válasz listener
+     */
+    public void getAnalyticsEngines(OnvifDevice device, OnvifRequest.Listener<List<String>> listener) {
+        final GetAnalyticsEnginesRequest request = new GetAnalyticsEnginesRequest(listener);
+        executor.sendRequest(device, request);
+    }
+
+    /**
+     * Létrehoz egy pull point subscription-t mozgásérzékelési eseményekhez
+     * @param device ONVIF eszköz
+     * @param listener válasz listener
+     */
+    public void createPullPointSubscription(OnvifDevice device, String[] eventFilters, int initialTerminationTimeSeconds,  OnvifRequest.Listener<String> listener) {
+        final CreatePullPointSubscriptionRequest request = new CreatePullPointSubscriptionRequest(listener, eventFilters, initialTerminationTimeSeconds);
+        executor.sendRequest(device, request);
+    }
+
+    /**
+     * Lekérdezi a mozgásérzékelési eseményeket
+     * @param device ONVIF eszköz
+     * @param subscriptionReference feliratkozás referenciája
+     * @param listener válasz listener
+     */
+    public void pullMessages(OnvifDevice device, String subscriptionReference, int messageLimit, int timeoutSeconds, OnvifRequest.Listener<List<OnvifMotionEvent>> listener) {
+        final PullMessagesRequest request = new PullMessagesRequest(subscriptionReference, messageLimit, timeoutSeconds, listener);
+        executor.sendRequest(device, request, timeoutSeconds);
+    }
+
+    /**
+     * Lekérdezi a kamera által támogatott esemény-topikokat és EventProperties-t.
+     * A válasz egy OnvifEventProperties modellben érkezik vissza.
+     *
+     * @param device   ONVIF eszköz
+     * @param listener válasz listener
+     */
+    public void getEventProperties(OnvifDevice device, OnvifRequest.Listener<OnvifEventProperties> listener) {
+        final GetEventPropertiesRequest request = new GetEventPropertiesRequest(listener);
+        executor.sendRequest(device, request);
+    }
+
+    // Event Broker Methods
+
+    /**
+     * Hozzáad egy Event Broker-t a kamerához
+     * @param device ONVIF eszköz
+     * @param brokerAddress Event Broker címe (URL)
+     * @param listener válasz listener
+     */
+    public void addEventBroker(OnvifDevice device, String brokerAddress, OnvifRequest.Listener<Void> listener) {
+        final AddEventBrokerRequest request = new AddEventBrokerRequest(brokerAddress, listener);
+        executor.sendRequest(device, request);
+    }
+
+    /**
+     * Töröl egy Event Broker-t a kameráról
+     * @param device ONVIF eszköz
+     * @param brokerToken Event Broker token-je
+     * @param listener válasz listener
+     */
+    public void deleteEventBroker(OnvifDevice device, String brokerToken, OnvifRequest.Listener<Void> listener) {
+        final DeleteEventBrokerRequest request = new DeleteEventBrokerRequest(brokerToken, listener);
+        executor.sendRequest(device, request);
+    }
+
+    /**
+     * Lekérdezi az Event Broker-eket
+     * @param device ONVIF eszköz
+     * @param listener válasz listener
+     */
+    public void getEventBrokers(OnvifDevice device, OnvifRequest.Listener<List<String>> listener) {
+        final GetEventBrokersRequest request = new GetEventBrokersRequest(listener);
+        executor.sendRequest(device, request);
+    }
+
+    /**
+     * Leiratkozás egy meglévő PullPoint / SubscriptionManager feliratkozásról.
+     *
+     * @param device                ONVIF eszköz (hitelesítéshez)
+     * @param subscriptionReference A CreatePullPointSubscription válaszában kapott Address URL
+     * @param listener              válasz listener
+     */
+    public void unsubscribe(OnvifDevice device, String subscriptionReference, OnvifRequest.Listener<Void> listener) {
+        final UnsubscribeRequest request = new UnsubscribeRequest(subscriptionReference, listener);
+        executor.sendRequest(device, request);
+    }
+
     public void setOnvifResponseListener(OnvifResponseListener onvifResponseListener) {
         this.onvifResponseListener = onvifResponseListener;
     }
@@ -107,5 +217,4 @@ public class OnvifManager implements OnvifResponseListener {
         if (onvifResponseListener != null)
             onvifResponseListener.onError(exception);
     }
-
 }

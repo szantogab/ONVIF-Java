@@ -15,6 +15,10 @@ public interface OnvifRequest<T> {
 
     Listener<T> getListener();
 
+    default String getSoapHeader() {
+        return "";
+    }
+
     interface Listener<T> {
         void onSuccess(OnvifDevice device, T data);
 

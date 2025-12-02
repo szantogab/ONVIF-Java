@@ -38,6 +38,15 @@ public class GetServicesParser extends OnvifParser<OnvifServices> {
                         String uri = OnvifUtils.retrieveXAddr(getXpp());
                         path.setProfilesPath(OnvifUtils.getPathFromURL(uri));
                         path.setStreamURIPath(OnvifUtils.getPathFromURL(uri));
+                    } else if (currentNamespace.equals(OnvifType.GET_MOTION_DETECTION_CONFIGURATION.namespace)
+                            || currentNamespace.equals(OnvifType.SET_MOTION_DETECTION_CONFIGURATION.namespace)
+                            || currentNamespace.equals(OnvifType.GET_ANALYTICS_ENGINES.namespace)) {
+                        String uri = OnvifUtils.retrieveXAddr(getXpp());
+                        path.setAnalyticsPath(OnvifUtils.getPathFromURL(uri));
+                    } else if (currentNamespace.equals(OnvifType.CREATE_PULL_POINT_SUBSCRIPTION.namespace)
+                            || currentNamespace.equals(OnvifType.PULL_MESSAGES.namespace)) {
+                        String uri = OnvifUtils.retrieveXAddr(getXpp());
+                        path.setEventsPath(OnvifUtils.getPathFromURL(uri));
                     }
                 }
 

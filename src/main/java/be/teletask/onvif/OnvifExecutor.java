@@ -3,10 +3,7 @@ package be.teletask.onvif;
 import be.teletask.onvif.listeners.OnvifResponseListener;
 import be.teletask.onvif.models.OnvifDevice;
 import be.teletask.onvif.models.OnvifServices;
-import be.teletask.onvif.parsers.GetDeviceInformationParser;
-import be.teletask.onvif.parsers.GetMediaProfilesParser;
-import be.teletask.onvif.parsers.GetMediaStreamParser;
-import be.teletask.onvif.parsers.GetServicesParser;
+import be.teletask.onvif.parsers.*;
 import be.teletask.onvif.requests.OnvifRequest;
 import be.teletask.onvif.responses.OnvifResponse;
 import com.burgstaller.okhttp.AuthenticationCacheInterceptor;
@@ -15,7 +12,6 @@ import com.burgstaller.okhttp.digest.CachingAuthenticator;
 import com.burgstaller.okhttp.digest.Credentials;
 import com.burgstaller.okhttp.digest.DigestAuthenticator;
 import okhttp3.*;
-import okio.Buffer;
 
 import java.io.IOException;
 import java.util.Map;
@@ -32,10 +28,8 @@ public class OnvifExecutor {
     public static final String TAG = OnvifExecutor.class.getSimpleName();
 
     //Attributes
-    private OkHttpClient client;
-    private MediaType reqBodyType;
-    private RequestBody reqBody;
-
+    private final OkHttpClient client;
+    private final MediaType reqBodyType = MediaType.parse("application/soap+xml; charset=utf-8;");
     private final Credentials credentials = new Credentials("", "");
     private OnvifResponseListener onvifResponseListener;
 
@@ -49,28 +43,31 @@ public class OnvifExecutor {
 
         client = new OkHttpClient.Builder()
                 .connectTimeout(3, TimeUnit.SECONDS)
-                .writeTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(10, TimeUnit.SECONDS)
+                .writeTimeout(5, TimeUnit.SECONDS)
+                .readTimeout(0, TimeUnit.SECONDS) // PullMessages can keep the connection open longer, timeout will be applied per request
                 .addInterceptor(new AuthenticationCacheInterceptor(authCache))
                 .authenticator(new CachingAuthenticatorDecorator(authenticator, authCache))
                 .build();
-
-        reqBodyType = MediaType.parse("application/soap+xml; charset=utf-8;");
     }
 
     //Methods
 
+    <T> void sendRequest(OnvifDevice device, OnvifRequest<T> request) {
+        sendRequest(device, request, 5);
+    }
+
     /**
      * Sends a request to the Onvif-compatible device.
-     *
-     * @param device
-     * @param request
      */
-    void sendRequest(OnvifDevice device, OnvifRequest<?> request) {
+    <T> void sendRequest(OnvifDevice device, OnvifRequest<T> request, int timeoutSeconds) {
         credentials.setUserName(device.getUsername());
         credentials.setPassword(device.getPassword());
-        reqBody = RequestBody.create(reqBodyType, OnvifXMLBuilder.getSoapHeader(credentials) + request.getXml() + OnvifXMLBuilder.getEnvelopeEnd());
-        performXmlRequest(device, request, buildOnvifRequest(device, request));
+
+        String body = OnvifXMLBuilder.getSoapHeader(credentials, request.getSoapHeader()) + request.getXml() + OnvifXMLBuilder.getEnvelopeEnd();
+/*        System.out.println("Request: " + getUrlForRequest(device, request));
+        System.out.println(body);*/
+
+        performXmlRequest(device, request, buildOnvifRequest(device, request, RequestBody.create(body, reqBodyType)), timeoutSeconds);
     }
 
     /**
@@ -86,61 +83,80 @@ public class OnvifExecutor {
         this.onvifResponseListener = onvifResponseListener;
     }
 
-    private void performXmlRequest(OnvifDevice device, OnvifRequest<?> request, Request xmlRequest) {
+    private <T> void performXmlRequest(OnvifDevice device, OnvifRequest<T> request, Request xmlRequest, int timeoutSeconds) {
         if (xmlRequest == null) return;
 
-        client.newCall(xmlRequest)
-                .enqueue(new Callback() {
+        final Call call = client.newCall(xmlRequest);
+        call.timeout().timeout(timeoutSeconds, TimeUnit.SECONDS);
 
-                    @Override
-                    public void onResponse(Call call, Response xmlResponse) throws IOException {
-                        OnvifResponse<Object> response = new OnvifResponse(request);
-                        ResponseBody xmlBody = xmlResponse.body();
+        try (Response xmlResponse = call.execute()) {
+            OnvifResponse<T> response = new OnvifResponse<>(request);
+            ResponseBody xmlBody = xmlResponse.body();
 
-                        if (xmlResponse.code() == 200 && xmlBody != null) {
-                            response.setSuccess(true);
-                            response.setXml(xmlBody.string());
-                            parseResponse(device, response);
-                            return;
-                        }
+            if (xmlResponse.code() == 200 && xmlBody != null) {
+                response.setSuccess(true);
+                response.setXml(xmlBody.string());
+                parseResponse(device, response);
+                return;
+            }
 
-                        String errorMessage = "";
-                        if (xmlBody != null)
-                            errorMessage = xmlBody.string();
+            String errorMessage = "";
+            if (xmlBody != null)
+                errorMessage = xmlBody.string();
 
-                        if (request.getListener() != null)
-                            request.getListener().onError(new OnvifRequest.OnvifException(device, xmlResponse.code(), errorMessage));
-                        if (onvifResponseListener != null)
-                            onvifResponseListener.onError(new OnvifRequest.OnvifException(device, xmlResponse.code(), errorMessage));
-                    }
-
-                    @Override
-                    public void onFailure(Call call, IOException e) {
-                        if (request.getListener() != null)
-                            request.getListener().onError(new OnvifRequest.OnvifException(device, -1, e.getMessage()));
-                        if (onvifResponseListener != null)
-                            onvifResponseListener.onError(new OnvifRequest.OnvifException(device, -1, e.getMessage()));
-                    }
-                });
+            if (request.getListener() != null)
+                request.getListener().onError(new OnvifRequest.OnvifException(device, xmlResponse.code(), errorMessage));
+            if (onvifResponseListener != null)
+                onvifResponseListener.onError(new OnvifRequest.OnvifException(device, xmlResponse.code(), errorMessage));
+        } catch (Exception e) {
+            if (request.getListener() != null)
+                request.getListener().onError(new OnvifRequest.OnvifException(device, -1, e.getMessage()));
+            if (onvifResponseListener != null)
+                onvifResponseListener.onError(new OnvifRequest.OnvifException(device, -1, e.getMessage()));
+        }
     }
 
-    private void parseResponse(OnvifDevice device, OnvifResponse<Object> response) {
-        Object data = null;
+    @SuppressWarnings("unchecked")
+    private <T> void parseResponse(OnvifDevice device, OnvifResponse<T> response) {
+        T data = null;
         switch (response.request().getType()) {
             case GET_SERVICES:
                 OnvifServices path = new GetServicesParser().parse(response);
                 device.setPath(path);
-                data = path;
+                data = (T) path;
                 break;
             case GET_DEVICE_INFORMATION:
-                data = new GetDeviceInformationParser().parse(response);
+                data = (T) new GetDeviceInformationParser().parse(response);
                 break;
             case GET_MEDIA_PROFILES:
-                data = new GetMediaProfilesParser().parse(response);
+                data = (T) new GetMediaProfilesParser().parse(response);
                 break;
             case GET_STREAM_URI:
             case GET_SNAPSHOT_URI:
-                data = new GetMediaStreamParser().parse(response);
+                data = (T) new GetMediaStreamParser().parse(response);
+                break;
+            case GET_MOTION_DETECTION_CONFIGURATION:
+                data = (T) new GetMotionDetectionConfigurationParser().parse(response);
+                break;
+            case SET_MOTION_DETECTION_CONFIGURATION:
+            case UNSUBSCRIBE:
+            case ADD_EVENT_BROKER:
+            case DELETE_EVENT_BROKER:
+                break;
+            case GET_ANALYTICS_ENGINES:
+                data = (T) new GetAnalyticsEnginesParser().parse(response);
+                break;
+            case CREATE_PULL_POINT_SUBSCRIPTION:
+                data = (T) new CreatePullPointSubscriptionParser().parse(response);
+                break;
+            case PULL_MESSAGES:
+                data = (T) new PullMessagesParser().parse(response);
+                break;
+            case GET_EVENT_PROPERTIES:
+                data = (T) new GetEventPropertiesParser().parse(response);
+                break;
+            case GET_EVENT_BROKERS:
+                data = (T) new GetEventBrokersParser().parse(response);
                 break;
             default:
                 onvifResponseListener.onResponse(device, response);
@@ -150,15 +166,29 @@ public class OnvifExecutor {
         response.request().getListener().onSuccess(device, data);
     }
 
-    private Request buildOnvifRequest(OnvifDevice device, OnvifRequest<?> request) {
+    private Request buildOnvifRequest(OnvifDevice device, OnvifRequest<?> request, RequestBody reqBody) {
         return new Request.Builder()
                 .url(getUrlForRequest(device, request))
-                .addHeader("Content-Type", "text/xml; charset=utf-8")
+                .addHeader("Content-Type", "application/soap+xml; charset=utf-8")
                 .post(reqBody)
                 .build();
     }
 
     private String getUrlForRequest(OnvifDevice device, OnvifRequest<?> request) {
+        // A PULL_MESSAGES és UNSUBSCRIBE kéréseknél az ONVIF szabvány szerint
+        // a PullPoint / SubscriptionManager "Address" mezője tartalmazza a teljes
+        // címet, ahová a hívást küldeni kell. Ilyenkor NEM a device host +
+        // eventsPath kombinációt kell használni, hanem közvetlenül ezt az URL-t.
+        if (request.getType() == be.teletask.onvif.models.OnvifType.PULL_MESSAGES
+                && request instanceof be.teletask.onvif.requests.PullMessagesRequest) {
+            return ((be.teletask.onvif.requests.PullMessagesRequest) request).getSubscriptionReference();
+        }
+
+        if (request.getType() == be.teletask.onvif.models.OnvifType.UNSUBSCRIBE
+                && request instanceof be.teletask.onvif.requests.UnsubscribeRequest) {
+            return ((be.teletask.onvif.requests.UnsubscribeRequest) request).getSubscriptionReference();
+        }
+
         return device.getHostName() + getPathForRequest(device, request);
     }
 
@@ -172,23 +202,21 @@ public class OnvifExecutor {
                 return device.getPath().getProfilesPath();
             case GET_STREAM_URI:
                 return device.getPath().getStreamURIPath();
+            case GET_MOTION_DETECTION_CONFIGURATION:
+            case SET_MOTION_DETECTION_CONFIGURATION:
+            case GET_ANALYTICS_ENGINES:
+            case CREATE_ANALYTICS_ENGINE_CONTROL:
+            case DELETE_ANALYTICS_ENGINE_CONTROL:
+                return device.getPath().getAnalyticsPath();
+            case GET_EVENT_PROPERTIES:
+            case CREATE_PULL_POINT_SUBSCRIPTION:
+            case PULL_MESSAGES:
+            case ADD_EVENT_BROKER:
+            case DELETE_EVENT_BROKER:
+            case GET_EVENT_BROKERS:
+                return device.getPath().getEventsPath();
         }
 
         return device.getPath().getServicesPath();
     }
-
-    private String bodyToString(Request request) {
-
-        try {
-            Request copy = request.newBuilder().build();
-            Buffer buffer = new Buffer();
-            if (copy.body() != null)
-                copy.body().writeTo(buffer);
-            return buffer.readUtf8();
-        } catch (IOException e) {
-            e.printStackTrace();
-            return "";
-        }
-    }
-
 }

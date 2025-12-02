@@ -23,7 +23,7 @@ public class OnvifXMLBuilder {
     public static final String TAG = OnvifXMLBuilder.class.getSimpleName();
 
     //Attributes
-    public static String getSoapHeader(Credentials cred) {
+    public static String getSoapHeader(Credentials cred, String extraHeader) {
         String nonce = null;
         String created = null;
         String digest = null;
@@ -55,12 +55,13 @@ public class OnvifXMLBuilder {
                 "<soap:Envelope " +
                 "xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" " +
                 "xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" " +
+                "xmlns:tev=\"http://www.onvif.org/ver10/events/wsdl\" " +
                 "xmlns:wsse=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\" soap:mustUnderstand=\"true\" " +
                 "xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\" >" +
                 (digest == null ? "" : "<soap:Header><Security xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\"><UsernameToken><Username>" + cred.getUserName() + "</Username><Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest\">" + digest + "</Password>" +
                         "<Nonce EncodingType=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary\">" + nonce + "</Nonce>" +
                         "<Created xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\">" + created + "</Created>" +
-                        "</UsernameToken></Security></soap:Header>") +
+                        "</UsernameToken></Security>" + extraHeader + "</soap:Header>") +
 
                 "<soap:Body>";
     }
