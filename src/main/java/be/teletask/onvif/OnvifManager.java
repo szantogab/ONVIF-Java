@@ -17,7 +17,7 @@ public class OnvifManager implements OnvifResponseListener {
     public final static String TAG = OnvifManager.class.getSimpleName();
 
     //Attributes
-    private OnvifExecutor executor;
+    private final OnvifExecutor executor;
     private OnvifResponseListener onvifResponseListener;
 
     //Constructors
@@ -54,6 +54,17 @@ public class OnvifManager implements OnvifResponseListener {
     public void getMediaSnapshotURI(OnvifDevice device, OnvifMediaProfile profile, OnvifRequest.Listener<String> listener) {
         final GetSnapshotUriRequest request = new GetSnapshotUriRequest(profile, listener);
         executor.sendRequest(device, request);
+    }
+
+    /**
+     * Lekéri a snapshot képet közvetlenül byte array-ként a megadott URI-ról
+     * @param device ONVIF eszköz
+     * @param snapshotUri Snapshot URI
+     * @param timeoutSeconds Timeout másodpercben
+     * @param listener válasz listener (ByteArray)
+     */
+    public void getMediaSnapshot(OnvifDevice device, String snapshotUri, int timeoutSeconds, OnvifRequest.Listener<byte[]> listener) {
+        executor.downloadSnapshot(device, snapshotUri, timeoutSeconds, listener);
     }
 
     public void ptzContinuousMove(OnvifDevice device, String profileToken, Double velocityX, Double velocityY, Double velocityZ, Integer timeout, OnvifRequest.Listener<Void> listener) {

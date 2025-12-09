@@ -44,3 +44,4 @@ public class GetEventBrokersParser extends OnvifParser<List<String>> {
         return eventBrokers;
     }
 }
+

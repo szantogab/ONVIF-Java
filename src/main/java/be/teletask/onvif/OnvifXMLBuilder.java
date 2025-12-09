@@ -61,7 +61,7 @@ public class OnvifXMLBuilder {
                 (digest == null ? "" : "<soap:Header><Security xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\"><UsernameToken><Username>" + cred.getUserName() + "</Username><Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest\">" + digest + "</Password>" +
                         "<Nonce EncodingType=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary\">" + nonce + "</Nonce>" +
                         "<Created xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\">" + created + "</Created>" +
-                        "</UsernameToken></Security>" + extraHeader + "</soap:Header>") +
+                        "</UsernameToken></Security>" + (extraHeader != null ? extraHeader : "") + "</soap:Header>") +
 
                 "<soap:Body>";
     }

@@ -44,3 +44,4 @@ public class DeleteEventBrokerRequest implements OnvifRequest<Void> {
         return OnvifType.DELETE_EVENT_BROKER;
     }
 }
+

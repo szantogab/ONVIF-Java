@@ -18,9 +18,7 @@ suspend fun OnvifDevice.getMediaStreamUri(profile: OnvifMediaProfile, om: OnvifM
 
 suspend fun OnvifDevice.getMediaSnapshotUri(profile: OnvifMediaProfile, om: OnvifManager = defaultOnvifManager) = awaitDeviceRequest<String> { om.getMediaSnapshotURI(this, profile, it) }
 
-suspend fun OnvifDevice.getAllMediaStreamUris(om: OnvifManager = defaultOnvifManager) = getMediaProfiles(om).map { getMediaStreamUri(it, om) }
-
-suspend fun OnvifDevice.getAllMediaSnapshotUris(om: OnvifManager = defaultOnvifManager) = getMediaProfiles(om).map { getMediaSnapshotUri(it, om) }
+suspend fun OnvifDevice.getMediaSnapshot(snapshotUri: String, timeoutSeconds: Int = 3, om: OnvifManager = defaultOnvifManager) = awaitDeviceRequest<ByteArray> { om.getMediaSnapshot(this, snapshotUri, timeoutSeconds, it) }
 
 suspend fun OnvifDevice.ptzContinuousMove(profileToken: String, velocityX: Double, velocityY: Double, velocityZ: Double?, timeout: Int?, om: OnvifManager = defaultOnvifManager) = awaitDeviceRequest<Void> { om.ptzContinuousMove(this, profileToken, velocityX, velocityY, velocityZ, timeout, it) }
 

@@ -41,3 +41,4 @@ public class GetEventBrokerRequest implements OnvifRequest<List<String>> {
         return OnvifType.GET_EVENT_BROKERS;
     }
 }
+

@@ -46,3 +46,4 @@ public class AddEventBrokerRequest implements OnvifRequest<Void> {
         return OnvifType.ADD_EVENT_BROKER;
     }
 }
+

@@ -12,6 +12,7 @@ fun main() = runBlocking {
 
 	val dev = OnvifDevice("192.168.0.119:8000", "admin", "admin")
 	val ae = dev.getEventProperties()
+
 	val sub = dev.createPullPointSubscription(arrayOf("tns1:RuleEngine/CellMotionDetector/Motion"), initialTerminationTimeSeconds = 60)
 	//val sub = dev.createPullPointSubscription(arrayOf("tns1:VideoSource/MotionAlarm"))
 

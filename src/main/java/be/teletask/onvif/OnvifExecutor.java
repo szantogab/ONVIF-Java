@@ -64,9 +64,6 @@ public class OnvifExecutor {
         credentials.setPassword(device.getPassword());
 
         String body = OnvifXMLBuilder.getSoapHeader(credentials, request.getSoapHeader()) + request.getXml() + OnvifXMLBuilder.getEnvelopeEnd();
-/*        System.out.println("Request: " + getUrlForRequest(device, request));
-        System.out.println(body);*/
-
         performXmlRequest(device, request, buildOnvifRequest(device, request, RequestBody.create(body, reqBodyType)), timeoutSeconds);
     }
 
@@ -81,6 +78,44 @@ public class OnvifExecutor {
 
     public void setOnvifResponseListener(OnvifResponseListener onvifResponseListener) {
         this.onvifResponseListener = onvifResponseListener;
+    }
+
+    /**
+     * Letölti a snapshot képet a megadott URI-ról
+     * @param device ONVIF eszköz (hitelesítéshez)
+     * @param snapshotUri Snapshot URI
+     * @param listener Válasz listener (ByteArray)
+     */
+    void downloadSnapshot(OnvifDevice device, String snapshotUri, int timeoutSeconds, OnvifRequest.Listener<byte[]> listener) {
+        credentials.setUserName(device.getUsername());
+        credentials.setPassword(device.getPassword());
+
+        Request request = new Request.Builder()
+                .url(snapshotUri)
+                .get()
+                .build();
+
+        final Call call = client.newCall(request);
+        call.timeout().timeout(timeoutSeconds, TimeUnit.SECONDS);
+
+        try (Response response = call.execute()) {
+            ResponseBody body = response.body();
+            if (response.code() == 200 && body != null) {
+                byte[] imageData = body.bytes();
+                if (listener != null) {
+                    listener.onSuccess(device, imageData);
+                }
+            } else {
+                String errorMessage = body != null ? body.string() : "HTTP " + response.code();
+                if (listener != null) {
+                    listener.onError(new OnvifRequest.OnvifException(device, response.code(), errorMessage));
+                }
+            }
+        } catch (Exception e) {
+            if (listener != null) {
+                listener.onError(new OnvifRequest.OnvifException(device, -1, e.getMessage()));
+            }
+        }
     }
 
     private <T> void performXmlRequest(OnvifDevice device, OnvifRequest<T> request, Request xmlRequest, int timeoutSeconds) {
