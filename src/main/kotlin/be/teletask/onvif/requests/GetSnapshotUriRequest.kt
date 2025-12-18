@@ -5,10 +5,10 @@ import be.teletask.onvif.models.OnvifType
 
 class GetSnapshotUriRequest(val profile: OnvifMediaProfile, val _listener: OnvifRequest.Listener<String>) : OnvifRequest<String> {
 
-    //Constants
-    val TAG = GetSnapshotUriRequest::class.java.simpleName
+	//Constants
+	val TAG = GetSnapshotUriRequest::class.java.simpleName
 
-    override fun getXml() = """
+	override fun getXml() = """
         <GetSnapshotUri xmlns="http://www.onvif.org/ver10/media/wsdl">
             <ProfileToken>${profile.token}</ProfileToken>
         </GetSnapshotUri>
