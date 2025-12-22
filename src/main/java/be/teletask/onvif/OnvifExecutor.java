@@ -52,6 +52,11 @@ public class OnvifExecutor {
 
     //Methods
 
+    private synchronized void setCredentials(String username, String password) {
+        credentials.setUserName(username);
+        credentials.setPassword(password);
+    }
+
     <T> void sendRequest(OnvifDevice device, OnvifRequest<T> request) {
         sendRequest(device, request, 5);
     }
@@ -60,10 +65,12 @@ public class OnvifExecutor {
      * Sends a request to the Onvif-compatible device.
      */
     <T> void sendRequest(OnvifDevice device, OnvifRequest<T> request, int timeoutSeconds) {
-        credentials.setUserName(device.getUsername());
-        credentials.setPassword(device.getPassword());
+        String body;
+        synchronized (credentials) {
+            setCredentials(device.getUsername(), device.getPassword());
+            body = OnvifXMLBuilder.getSoapHeader(credentials, request.getSoapHeader()) + request.getXml() + OnvifXMLBuilder.getEnvelopeEnd();
+        }
 
-        String body = OnvifXMLBuilder.getSoapHeader(credentials, request.getSoapHeader()) + request.getXml() + OnvifXMLBuilder.getEnvelopeEnd();
         performXmlRequest(device, request, buildOnvifRequest(device, request, RequestBody.create(body, reqBodyType)), timeoutSeconds);
     }
 
@@ -87,8 +94,7 @@ public class OnvifExecutor {
      * @param listener Válasz listener (ByteArray)
      */
     void downloadSnapshot(OnvifDevice device, String snapshotUri, int timeoutSeconds, OnvifRequest.Listener<byte[]> listener) {
-        credentials.setUserName(device.getUsername());
-        credentials.setPassword(device.getPassword());
+        setCredentials(device.getUsername(), device.getPassword());
 
         Request request = new Request.Builder()
                 .url(snapshotUri)

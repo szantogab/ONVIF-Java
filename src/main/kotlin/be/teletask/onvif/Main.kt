@@ -10,7 +10,7 @@ import java.time.format.DateTimeFormatter
 fun main() = runBlocking {
    val onvifDevices = discoverDevices { discoveryMode = DiscoveryMode.ONVIF; discoveryTimeout = 2000; }.filterIsInstance<OnvifDevice>()
 
-	val dev = OnvifDevice("192.168.0.119:8000", "admin", "admin")
+	val dev = onvifDevices.first()
 	val ae = dev.getEventProperties()
 
 	val sub = dev.createPullPointSubscription(arrayOf("tns1:RuleEngine/CellMotionDetector/Motion"), initialTerminationTimeSeconds = 60)
