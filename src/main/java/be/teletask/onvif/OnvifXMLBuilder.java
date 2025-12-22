@@ -35,7 +35,9 @@ public class OnvifXMLBuilder {
                 byte[] bytes = new byte[20];
                 new Random().nextBytes(bytes);
                 nonce = Base64.getEncoder().encodeToString(bytes);
-                created = ZonedDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+
+                // Use UTC time explicitly to avoid timezone issues
+                created = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
 
                 byte[] createdByteArray = created.getBytes(StandardCharsets.UTF_8);
                 byte[] passwordByteArray = cred.getPassword().getBytes(StandardCharsets.UTF_8);
@@ -46,6 +48,7 @@ public class OnvifXMLBuilder {
 
                 md.update(c);
                 digest = Base64.getEncoder().encodeToString(md.digest());
+
             } catch (NoSuchAlgorithmException e) {
                 e.printStackTrace();
             }

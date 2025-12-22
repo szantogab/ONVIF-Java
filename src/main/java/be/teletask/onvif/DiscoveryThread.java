@@ -18,10 +18,10 @@ public class DiscoveryThread extends Thread {
     public static final String TAG = DiscoveryThread.class.getSimpleName();
 
     //Attributes
-    private DatagramSocket server;
-    private int timeout;
-    private DiscoveryParser parser;
-    private DiscoveryCallback callback;
+    private final DatagramSocket server;
+    private final int timeout;
+    private final DiscoveryParser parser;
+    private final DiscoveryCallback callback;
 
     //Constructors
     DiscoveryThread(DatagramSocket server, int timeout, DiscoveryMode mode, DiscoveryCallback callback) {

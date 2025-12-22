@@ -38,7 +38,7 @@ public class OnvifDiscovery {
     public static final String TAG = OnvifDiscovery.class.getSimpleName();
     private static final String MULTICAST_ADDRESS_IPV4 = "239.255.255.250"; // Simple Service Discovery Protocol
     private static final String MULTICAST_ADDRESS_IPV6 = "[FF02::C]";
-    private static int DISCOVERY_TIMEOUT = 10000;
+    private static final int DISCOVERY_TIMEOUT = 10000;
 
     private static final Random random = new SecureRandom();
 
@@ -105,24 +105,26 @@ public class OnvifDiscovery {
 
     private void broadcast(List<InetAddress> addresses) {
         //Our list will be accessed by multiple threads, hence ConcurrentSkipListSet
-        Collection<Device> devices = new ConcurrentSkipListSet<>();
+        final Collection<Device> devices = new ConcurrentSkipListSet<>();
 
         //Create a new cached thread pool and a monitor service
-        ExecutorService executorService = Executors.newCachedThreadPool();
-        ExecutorService monitor = Executors.newSingleThreadExecutor();
-        CountDownLatch latch = new CountDownLatch(addresses.size());
-        List<Runnable> runnables = new ArrayList<>();
+        final ExecutorService executorService = Executors.newCachedThreadPool();
+        final ExecutorService monitor = Executors.newSingleThreadExecutor();
+        final CountDownLatch latch = new CountDownLatch(addresses.size());
+        final List<Runnable> runnables = new ArrayList<>();
+
+        OnvifPacket packet = createDiscoveryPacket();
+        byte[] data = packet.getData();
 
         //Add runnables to the list to be executed in order
         for (InetAddress address : addresses) {
+            if (address.isLoopbackAddress() || !(address instanceof Inet4Address)) continue;
+
             runnables.add(() -> {
                 try {
-                    OnvifPacket packet = createDiscoveryPacket();
-                    byte[] data = packet.getData();
-
                     int port = random.nextInt(20000) + 40000;
 
-                    DatagramSocket client = new DatagramSocket(port, address);
+                    final DatagramSocket client = new DatagramSocket(port, address);
                     client.setBroadcast(true);
 
                     //Start a new thread to listen for incoming UDP packages
@@ -198,10 +200,10 @@ public class OnvifDiscovery {
     List<InetAddress> getInterfaceAddresses() {
         List<InetAddress> addresses = new ArrayList<>();
         try {
-            Enumeration interfaces = NetworkInterface.getNetworkInterfaces();
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
 
             while (interfaces.hasMoreElements()) {
-                NetworkInterface networkInterface = (NetworkInterface) interfaces.nextElement();
+                NetworkInterface networkInterface = interfaces.nextElement();
 
                 if (networkInterface.isLoopback() || !networkInterface.isUp()) {
                     continue; // Don't want to broadcast to the loopback interface

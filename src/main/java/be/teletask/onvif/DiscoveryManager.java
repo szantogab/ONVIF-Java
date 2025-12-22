@@ -16,7 +16,7 @@ public class DiscoveryManager {
     public static final String TAG = DiscoveryManager.class.getSimpleName();
 
     //Attributes
-    private OnvifDiscovery discovery;
+    private final OnvifDiscovery discovery;
 
     //Constructors
 

@@ -8,7 +8,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 fun main() = runBlocking {
-   val onvifDevices = discoverDevices { discoveryMode = DiscoveryMode.ONVIF; discoveryTimeout = 2000; }.filterIsInstance<OnvifDevice>()
+	val onvifDevices = discoverDevices { discoveryMode = DiscoveryMode.ONVIF; discoveryTimeout = 2000; }.filterIsInstance<OnvifDevice>()
 
 	val dev = onvifDevices.first()
 	val ae = dev.getEventProperties()
@@ -20,6 +20,7 @@ fun main() = runBlocking {
 
 	for (i in 0..5) {
 		println("Pulling events.." + LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME))
+
 		val newEvents = dev.pullMessages(sub, timeoutSeconds = 60)
 		events.addAll(newEvents)
 		println("Pulled events: " + newEvents.joinToString(separator = "\n") { it.toString() })
@@ -37,5 +38,5 @@ fun main() = runBlocking {
 	dev.ptzAbsoluteMove(mediaProfiles.first().token, 0.1, 0.0, 1.0)
 	dev.ptzStop(mediaProfiles.first().token)
 
-    Unit
+	Unit
 }

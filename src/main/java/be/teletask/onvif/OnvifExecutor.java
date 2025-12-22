@@ -17,6 +17,8 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Created by Tomas Verhelst on 03/09/2018.
@@ -26,36 +28,40 @@ public class OnvifExecutor {
 
     //Constants
     public static final String TAG = OnvifExecutor.class.getSimpleName();
+    private static final Logger LOGGER = Logger.getLogger(OnvifExecutor.class.getName());
 
     //Attributes
-    private final OkHttpClient client;
     private final MediaType reqBodyType = MediaType.parse("application/soap+xml; charset=utf-8;");
-    private final Credentials credentials = new Credentials("", "");
+    private final ConcurrentHashMap<String, OkHttpClient> clientPool = new ConcurrentHashMap<>();
     private OnvifResponseListener onvifResponseListener;
 
     //Constructors
 
     OnvifExecutor(OnvifResponseListener onvifResponseListener) {
         this.onvifResponseListener = onvifResponseListener;
+    }
 
-        DigestAuthenticator authenticator = new DigestAuthenticator(credentials);
-        Map<String, CachingAuthenticator> authCache = new ConcurrentHashMap<>();
+    /**
+     * Visszaadja vagy létrehozza az OkHttpClient példányt az adott eszközhöz
+     */
+    private OkHttpClient getClientForDevice(OnvifDevice device) {
+        String deviceKey = device.getHostName() + ":" + device.getUsername();
+        return clientPool.computeIfAbsent(deviceKey, key -> {
+            Credentials deviceCredentials = new Credentials(device.getUsername(), device.getPassword());
+            DigestAuthenticator authenticator = new DigestAuthenticator(deviceCredentials);
+            Map<String, CachingAuthenticator> authCache = new ConcurrentHashMap<>();
 
-        client = new OkHttpClient.Builder()
-                .connectTimeout(3, TimeUnit.SECONDS)
-                .writeTimeout(5, TimeUnit.SECONDS)
-                .readTimeout(0, TimeUnit.SECONDS) // PullMessages can keep the connection open longer, timeout will be applied per request
-                .addInterceptor(new AuthenticationCacheInterceptor(authCache))
-                .authenticator(new CachingAuthenticatorDecorator(authenticator, authCache))
-                .build();
+            return new OkHttpClient.Builder()
+                    .connectTimeout(3, TimeUnit.SECONDS)
+                    .writeTimeout(5, TimeUnit.SECONDS)
+                    .readTimeout(0, TimeUnit.SECONDS) // PullMessages can keep the connection open longer, timeout will be applied per request
+                    .addInterceptor(new AuthenticationCacheInterceptor(authCache))
+                    .authenticator(new CachingAuthenticatorDecorator(authenticator, authCache))
+                    .build();
+        });
     }
 
     //Methods
-
-    private synchronized void setCredentials(String username, String password) {
-        credentials.setUserName(username);
-        credentials.setPassword(password);
-    }
 
     <T> void sendRequest(OnvifDevice device, OnvifRequest<T> request) {
         sendRequest(device, request, 5);
@@ -65,12 +71,9 @@ public class OnvifExecutor {
      * Sends a request to the Onvif-compatible device.
      */
     <T> void sendRequest(OnvifDevice device, OnvifRequest<T> request, int timeoutSeconds) {
-        String body;
-        synchronized (credentials) {
-            setCredentials(device.getUsername(), device.getPassword());
-            body = OnvifXMLBuilder.getSoapHeader(credentials, request.getSoapHeader()) + request.getXml() + OnvifXMLBuilder.getEnvelopeEnd();
-        }
-
+        Credentials deviceCredentials = new Credentials(device.getUsername(), device.getPassword());
+        String body = OnvifXMLBuilder.getSoapHeader(deviceCredentials, request.getSoapHeader()) + request.getXml() + OnvifXMLBuilder.getEnvelopeEnd();
+        LOGGER.log(Level.FINE, "Onvif Sending Request: {0}", body);
         performXmlRequest(device, request, buildOnvifRequest(device, request, RequestBody.create(body, reqBodyType)), timeoutSeconds);
     }
 
@@ -79,6 +82,12 @@ public class OnvifExecutor {
      */
     void clear() {
         onvifResponseListener = null;
+        // Kliensek leállítása és erőforrások felszabadítása
+        for (OkHttpClient client : clientPool.values()) {
+            client.dispatcher().executorService().shutdown();
+            client.connectionPool().evictAll();
+        }
+        clientPool.clear();
     }
 
     //Properties
@@ -94,14 +103,13 @@ public class OnvifExecutor {
      * @param listener Válasz listener (ByteArray)
      */
     void downloadSnapshot(OnvifDevice device, String snapshotUri, int timeoutSeconds, OnvifRequest.Listener<byte[]> listener) {
-        setCredentials(device.getUsername(), device.getPassword());
-
         Request request = new Request.Builder()
                 .url(snapshotUri)
                 .get()
                 .build();
 
-        final Call call = client.newCall(request);
+        OkHttpClient deviceClient = getClientForDevice(device);
+        final Call call = deviceClient.newCall(request);
         call.timeout().timeout(timeoutSeconds, TimeUnit.SECONDS);
 
         try (Response response = call.execute()) {
@@ -127,7 +135,8 @@ public class OnvifExecutor {
     private <T> void performXmlRequest(OnvifDevice device, OnvifRequest<T> request, Request xmlRequest, int timeoutSeconds) {
         if (xmlRequest == null) return;
 
-        final Call call = client.newCall(xmlRequest);
+        OkHttpClient deviceClient = getClientForDevice(device);
+        final Call call = deviceClient.newCall(xmlRequest);
         call.timeout().timeout(timeoutSeconds, TimeUnit.SECONDS);
 
         try (Response xmlResponse = call.execute()) {
