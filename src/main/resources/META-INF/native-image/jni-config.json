@@ -1,0 +1,11 @@
+[
+  {
+    "name": "java.security.MessageDigest",
+    "methods": [
+      {
+        "name": "getInstance",
+        "parameterTypes": ["java.lang.String"]
+      }
+    ]
+  }
+]

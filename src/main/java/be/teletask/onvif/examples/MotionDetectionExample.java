@@ -3,11 +3,7 @@ package be.teletask.onvif.examples;
 import be.teletask.onvif.OnvifManager;
 import be.teletask.onvif.listeners.OnvifMotionDetectionListener;
 import be.teletask.onvif.listeners.OnvifMotionEventListener;
-import be.teletask.onvif.models.OnvifDevice;
-import be.teletask.onvif.models.OnvifMotionDetection;
-import be.teletask.onvif.models.OnvifMotionDetectionConfig;
-import be.teletask.onvif.models.OnvifMotionDetectionArea;
-import be.teletask.onvif.models.OnvifMotionEvent;
+import be.teletask.onvif.models.*;
 import be.teletask.onvif.requests.OnvifRequest;
 
 import java.util.List;
@@ -19,7 +15,7 @@ import java.util.List;
  */
 public class MotionDetectionExample implements OnvifMotionDetectionListener, OnvifMotionEventListener {
 
-    private OnvifManager onvifManager;
+    public OnvifManager onvifManager;
     private OnvifDevice device;
     private String subscriptionReference;
 
@@ -55,7 +51,7 @@ public class MotionDetectionExample implements OnvifMotionDetectionListener, Onv
     public void setMotionDetectionConfiguration() {
         // Mozgásérzékelési terület létrehozása (teljes kép)
         OnvifMotionDetectionArea detectionArea = new OnvifMotionDetectionArea(0.0f, 0.0f, 1.0f, 1.0f);
-        
+
         // Konfiguráció létrehozása
         OnvifMotionDetectionConfig config = new OnvifMotionDetectionConfig();
         config.setSensitivity(75); // 75% érzékenység
@@ -212,8 +208,42 @@ public class MotionDetectionExample implements OnvifMotionDetectionListener, Onv
         MotionDetectionExample example = new MotionDetectionExample();
         
         // Eszköz beállítása (példa)
-        example.device = new OnvifDevice("192.168.1.100", "admin", "password");
-        
+        example.device = new OnvifDevice("192.168.0.119", "smartive", "smartive1");
+
+        example.onvifManager.getMediaProfiles(example.device, new OnvifRequest.Listener<List<OnvifMediaProfile>>() {
+            @Override
+            public void onSuccess(OnvifDevice device, List<OnvifMediaProfile> data) {
+                example.onvifManager.getMediaSnapshotURI(example.device, data.get(0), new OnvifRequest.Listener<String>() {
+                    @Override
+                    public void onSuccess(OnvifDevice device, String data) {
+                        example.onvifManager.getMediaSnapshot(example.device, data, 5, new OnvifRequest.Listener<byte[]>() {
+                            @Override
+                            public void onSuccess(OnvifDevice device, byte[] data) {
+                                System.out.println("Obtained media snapshot.");
+                            }
+
+                            @Override
+                            public void onError(OnvifRequest.OnvifException exception) {
+                                System.out.println("Failed to obtain media snapshot.");
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(OnvifRequest.OnvifException exception) {
+                        System.out.println("Failed to obtain media snapshot URI.");
+                    }
+                });
+            }
+
+            @Override
+            public void onError(OnvifRequest.OnvifException exception) {
+                System.out.println("Failed to obtain media profiles.");
+            }
+        });
+
+
+
         // Mozgásérzékelési funkciók tesztelése
         example.getAnalyticsEngines();
         example.getMotionDetectionConfiguration();

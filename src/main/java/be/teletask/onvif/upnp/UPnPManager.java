@@ -15,7 +15,7 @@ public class UPnPManager implements UPnPResponseListener {
 
     //Attributes
     private UPnPExecutor executor;
-    private UPnPResponseListener responseListener;
+    private volatile UPnPResponseListener responseListener;
 
     //Constructors
     public UPnPManager() {
@@ -40,6 +40,13 @@ public class UPnPManager implements UPnPResponseListener {
 
     public void setResponseListener(UPnPResponseListener responseListener) {
         this.responseListener = responseListener;
+    }
+
+    /**
+     * Feloldja a belső executor válaszfigyelőjét; hívandó, ha a managerre már nincs szükség.
+     */
+    public void destroy() {
+        executor.clear();
     }
 
     @Override

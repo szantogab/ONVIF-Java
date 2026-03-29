@@ -1,22 +1,19 @@
 package be.teletask.onvif;
 
+import be.teletask.onvif.http.HttpDigest;
 import be.teletask.onvif.listeners.OnvifResponseListener;
 import be.teletask.onvif.models.OnvifDevice;
 import be.teletask.onvif.models.OnvifServices;
 import be.teletask.onvif.parsers.*;
 import be.teletask.onvif.requests.OnvifRequest;
 import be.teletask.onvif.responses.OnvifResponse;
-import com.burgstaller.okhttp.AuthenticationCacheInterceptor;
-import com.burgstaller.okhttp.CachingAuthenticatorDecorator;
-import com.burgstaller.okhttp.digest.CachingAuthenticator;
-import com.burgstaller.okhttp.digest.Credentials;
-import com.burgstaller.okhttp.digest.DigestAuthenticator;
-import okhttp3.*;
 
-import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -31,34 +28,17 @@ public class OnvifExecutor {
     private static final Logger LOGGER = Logger.getLogger(OnvifExecutor.class.getName());
 
     //Attributes
-    private final MediaType reqBodyType = MediaType.parse("application/soap+xml; charset=utf-8;");
-    private final ConcurrentHashMap<String, OkHttpClient> clientPool = new ConcurrentHashMap<>();
-    private OnvifResponseListener onvifResponseListener;
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(3))
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+    /** volatile: {@link #clear()} és párhuzamos HTTP-válasz feldolgozás között láthatóság */
+    private volatile OnvifResponseListener onvifResponseListener;
 
     //Constructors
 
     OnvifExecutor(OnvifResponseListener onvifResponseListener) {
         this.onvifResponseListener = onvifResponseListener;
-    }
-
-    /**
-     * Visszaadja vagy létrehozza az OkHttpClient példányt az adott eszközhöz
-     */
-    private OkHttpClient getClientForDevice(OnvifDevice device) {
-        String deviceKey = device.getHostName() + ":" + device.getUsername();
-        return clientPool.computeIfAbsent(deviceKey, key -> {
-            Credentials deviceCredentials = new Credentials(device.getUsername(), device.getPassword());
-            DigestAuthenticator authenticator = new DigestAuthenticator(deviceCredentials);
-            Map<String, CachingAuthenticator> authCache = new ConcurrentHashMap<>();
-
-            return new OkHttpClient.Builder()
-                    .connectTimeout(3, TimeUnit.SECONDS)
-                    .writeTimeout(5, TimeUnit.SECONDS)
-                    .readTimeout(0, TimeUnit.SECONDS) // PullMessages can keep the connection open longer, timeout will be applied per request
-                    .addInterceptor(new AuthenticationCacheInterceptor(authCache))
-                    .authenticator(new CachingAuthenticatorDecorator(authenticator, authCache))
-                    .build();
-        });
     }
 
     //Methods
@@ -71,23 +51,20 @@ public class OnvifExecutor {
      * Sends a request to the Onvif-compatible device.
      */
     <T> void sendRequest(OnvifDevice device, OnvifRequest<T> request, int timeoutSeconds) {
-        Credentials deviceCredentials = new Credentials(device.getUsername(), device.getPassword());
-        String body = OnvifXMLBuilder.getSoapHeader(deviceCredentials, request.getSoapHeader()) + request.getXml() + OnvifXMLBuilder.getEnvelopeEnd();
+        String body = OnvifXMLBuilder.getSoapHeader(device.getUsername(), device.getPassword(), request.getSoapHeader())
+                + request.getXml() + OnvifXMLBuilder.getEnvelopeEnd();
         LOGGER.log(Level.FINE, "Onvif Sending Request: {0}", body);
-        performXmlRequest(device, request, buildOnvifRequest(device, request, RequestBody.create(body, reqBodyType)), timeoutSeconds);
+        performXmlRequest(device, request, body, timeoutSeconds);
     }
 
     /**
-     * Clears up the resources.
+     * Elengedi a globális válaszfigyelőt. A {@link HttpClient}-nek nincs {@code close()} API-ja;
+     * a belső connection pool a JVM életciklusáig él, nincs külön explicit lezárás.
+     * A már futó szinkron HTTP hívások a visszatéréskor még hívhatnak listener-t;
+     * a {@code null} figyelő miatt a globális callback-ek elmaradnak (NPE elkerülése).
      */
     void clear() {
         onvifResponseListener = null;
-        // Kliensek leállítása és erőforrások felszabadítása
-        for (OkHttpClient client : clientPool.values()) {
-            client.dispatcher().executorService().shutdown();
-            client.connectionPool().evictAll();
-        }
-        clientPool.clear();
     }
 
     //Properties
@@ -103,26 +80,31 @@ public class OnvifExecutor {
      * @param listener Válasz listener (ByteArray)
      */
     void downloadSnapshot(OnvifDevice device, String snapshotUri, int timeoutSeconds, OnvifRequest.Listener<byte[]> listener) {
-        Request request = new Request.Builder()
-                .url(snapshotUri)
-                .get()
-                .build();
+        try {
+            URI uri = URI.create(snapshotUri);
+            Map<String, String> headers = new HashMap<>();
+            HttpResponse<byte[]> response = HttpDigest.executeBytes(
+                    httpClient,
+                    "GET",
+                    uri,
+                    headers,
+                    null,
+                    device.getUsername(),
+                    device.getPassword(),
+                    Duration.ofSeconds(timeoutSeconds)
+            );
 
-        OkHttpClient deviceClient = getClientForDevice(device);
-        final Call call = deviceClient.newCall(request);
-        call.timeout().timeout(timeoutSeconds, TimeUnit.SECONDS);
-
-        try (Response response = call.execute()) {
-            ResponseBody body = response.body();
-            if (response.code() == 200 && body != null) {
-                byte[] imageData = body.bytes();
+            if (response.statusCode() == 200) {
+                byte[] imageData = response.body();
                 if (listener != null) {
                     listener.onSuccess(device, imageData);
                 }
             } else {
-                String errorMessage = body != null ? body.string() : "HTTP " + response.code();
+                String errorMessage = response.body() != null && response.body().length > 0
+                        ? new String(response.body(), java.nio.charset.StandardCharsets.UTF_8)
+                        : "HTTP " + response.statusCode();
                 if (listener != null) {
-                    listener.onError(new OnvifRequest.OnvifException(device, response.code(), errorMessage));
+                    listener.onError(new OnvifRequest.OnvifException(device, response.statusCode(), errorMessage));
                 }
             }
         } catch (Exception e) {
@@ -132,37 +114,51 @@ public class OnvifExecutor {
         }
     }
 
-    private <T> void performXmlRequest(OnvifDevice device, OnvifRequest<T> request, Request xmlRequest, int timeoutSeconds) {
-        if (xmlRequest == null) return;
+    private <T> void performXmlRequest(OnvifDevice device, OnvifRequest<T> request, String body, int timeoutSeconds) {
+        if (body == null) {
+            return;
+        }
 
-        OkHttpClient deviceClient = getClientForDevice(device);
-        final Call call = deviceClient.newCall(xmlRequest);
-        call.timeout().timeout(timeoutSeconds, TimeUnit.SECONDS);
+        try {
+            URI uri = URI.create(getUrlForRequest(device, request));
+            Map<String, String> headers = new HashMap<>();
+            headers.put("Content-Type", "application/soap+xml; charset=utf-8");
 
-        try (Response xmlResponse = call.execute()) {
+            HttpResponse<String> xmlResponse = HttpDigest.execute(
+                    httpClient,
+                    "POST",
+                    uri,
+                    headers,
+                    body,
+                    device.getUsername(),
+                    device.getPassword(),
+                    Duration.ofSeconds(timeoutSeconds)
+            );
+
             OnvifResponse<T> response = new OnvifResponse<>(request);
-            ResponseBody xmlBody = xmlResponse.body();
 
-            if (xmlResponse.code() == 200 && xmlBody != null) {
+            if (xmlResponse.statusCode() == 200 && xmlResponse.body() != null) {
                 response.setSuccess(true);
-                response.setXml(xmlBody.string());
+                response.setXml(xmlResponse.body());
                 parseResponse(device, response);
                 return;
             }
 
-            String errorMessage = "";
-            if (xmlBody != null)
-                errorMessage = xmlBody.string();
+            String errorMessage = xmlResponse.body() != null ? xmlResponse.body() : "";
 
-            if (request.getListener() != null)
-                request.getListener().onError(new OnvifRequest.OnvifException(device, xmlResponse.code(), errorMessage));
-            if (onvifResponseListener != null)
-                onvifResponseListener.onError(new OnvifRequest.OnvifException(device, xmlResponse.code(), errorMessage));
+            if (request.getListener() != null) {
+                request.getListener().onError(new OnvifRequest.OnvifException(device, xmlResponse.statusCode(), errorMessage));
+            }
+            if (onvifResponseListener != null) {
+                onvifResponseListener.onError(new OnvifRequest.OnvifException(device, xmlResponse.statusCode(), errorMessage));
+            }
         } catch (Exception e) {
-            if (request.getListener() != null)
+            if (request.getListener() != null) {
                 request.getListener().onError(new OnvifRequest.OnvifException(device, -1, e.getMessage()));
-            if (onvifResponseListener != null)
+            }
+            if (onvifResponseListener != null) {
                 onvifResponseListener.onError(new OnvifRequest.OnvifException(device, -1, e.getMessage()));
+            }
         }
     }
 
@@ -209,19 +205,13 @@ public class OnvifExecutor {
                 data = (T) new GetEventBrokersParser().parse(response);
                 break;
             default:
-                onvifResponseListener.onResponse(device, response);
+                if (onvifResponseListener != null) {
+                    onvifResponseListener.onResponse(device, response);
+                }
                 break;
         }
 
         response.request().getListener().onSuccess(device, data);
-    }
-
-    private Request buildOnvifRequest(OnvifDevice device, OnvifRequest<?> request, RequestBody reqBody) {
-        return new Request.Builder()
-                .url(getUrlForRequest(device, request))
-                .addHeader("Content-Type", "application/soap+xml; charset=utf-8")
-                .post(reqBody)
-                .build();
     }
 
     private String getUrlForRequest(OnvifDevice device, OnvifRequest<?> request) {

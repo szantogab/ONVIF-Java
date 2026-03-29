@@ -18,7 +18,8 @@ public class OnvifManager implements OnvifResponseListener {
 
     //Attributes
     private final OnvifExecutor executor;
-    private OnvifResponseListener onvifResponseListener;
+    /** volatile: {@link #destroy()} és executor callback-ek között láthatóság */
+    private volatile OnvifResponseListener onvifResponseListener;
 
     //Constructors
     public OnvifManager() {

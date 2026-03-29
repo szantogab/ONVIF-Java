@@ -5,20 +5,26 @@ plugins {
     `maven-publish`
 }
 
+java {
+    sourceCompatibility = JavaVersion.toVersion(17)
+}
+
+kotlin {
+    jvmToolchain(17)
+}
+
 repositories {
     mavenCentral()
     jcenter()
 }
 
 group = "be.teletask.onvif"
-version = "1.1.15"
+version = "1.1.16"
 
 dependencies {
     implementation(kotlin("stdlib"))
     implementation("org.jetbrains", "annotations", "15.0")
     implementation("net.sf.kxml", "kxml2", "2.3.0")
-    implementation("com.squareup.okhttp3", "okhttp", "4.9.3")
-    implementation("io.github.rburgst", "okhttp-digest", "2.7")
     implementation("org.jetbrains.kotlinx", "kotlinx-coroutines-core", "1.9.0")
 }
 

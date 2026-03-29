@@ -57,7 +57,7 @@ public class CreatePullPointSubscriptionRequest implements OnvifRequest<String> 
             xml.append("</tev:Filter>");
         }
 
-        xml.append("<tev:InitialTerminationTime>PT" + initialTerminationTimeSeconds + "S</tev:InitialTerminationTime>");
+        xml.append("<tev:InitialTerminationTime>PT").append(initialTerminationTimeSeconds).append("S</tev:InitialTerminationTime>");
         xml.append("</tev:CreatePullPointSubscription>");
         
         return xml.toString();

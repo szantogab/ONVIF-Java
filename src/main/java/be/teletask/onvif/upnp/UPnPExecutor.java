@@ -3,12 +3,13 @@ package be.teletask.onvif.upnp;
 import be.teletask.onvif.models.UPnPDevice;
 import be.teletask.onvif.parsers.UPnPParser;
 import be.teletask.onvif.responses.OnvifResponse;
-import okhttp3.*;
-import okio.Buffer;
 
-
-import java.io.IOException;
-import java.util.concurrent.TimeUnit;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Created by Tomas Verhelst on 03/09/2018.
@@ -20,19 +21,17 @@ public class UPnPExecutor {
     public static final String TAG = UPnPExecutor.class.getSimpleName();
 
     //Attributes
-    private OkHttpClient client;
-    private UPnPResponseListener responseListener;
+    private final HttpClient client = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+    /** volatile: {@link #clear()} és {@link CompletableFuture} callback között láthatóság */
+    private volatile UPnPResponseListener responseListener;
 
     //Constructors
 
     UPnPExecutor(UPnPResponseListener responseListener) {
         this.responseListener = responseListener;
-
-        client = new OkHttpClient.Builder()
-                .connectTimeout(10000, TimeUnit.SECONDS)
-                .writeTimeout(100, TimeUnit.SECONDS)
-                .readTimeout(10000, TimeUnit.SECONDS)
-                .build();
     }
 
     //Methods
@@ -48,38 +47,28 @@ public class UPnPExecutor {
      * Sends a request to a UPnP device.
      */
     void getDeviceInformation(UPnPDevice device, UPnPDeviceInformationListener listener) {
-        Request request = buildUPnPRequest(device);
-        client.newCall(request)
-                .enqueue(new Callback() {
+        HttpRequest request = buildUPnPRequest(device);
+        CompletableFuture<HttpResponse<String>> future = client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
+        future.whenComplete((xmlResponse, throwable) -> {
+            if (throwable != null) {
+                listener.onError(device, -1, throwable.getMessage());
+                return;
+            }
+            if (xmlResponse.statusCode() == 200 && xmlResponse.body() != null) {
+                UPnPDeviceInformation information = parseDeviceInformation(device, xmlResponse.body());
+                device.setDeviceInformation(information);
+                listener.onDeviceInformationReceived(device, information);
+                return;
+            }
 
-                    @Override
-                    public void onResponse(Call call, Response xmlResponse) throws IOException {
-                        ResponseBody xmlBody = xmlResponse.body();
-
-                        if (xmlResponse.code() == 200 && xmlBody != null) {
-                            UPnPDeviceInformation information = parseDeviceInformation(device, xmlBody.string());
-                            device.setDeviceInformation(information);
-                            listener.onDeviceInformationReceived(device, information);
-                            return;
-                        }
-
-                        String errorMessage = "";
-                        if (xmlBody != null)
-                            errorMessage = xmlBody.string();
-
-                        listener.onError(device, xmlResponse.code(), errorMessage);
-                    }
-
-                    @Override
-                    public void onFailure(Call call, IOException e) {
-                        listener.onError(device, -1, e.getMessage());
-                    }
-
-                });
+            String errorMessage = xmlResponse.body() != null ? xmlResponse.body() : "";
+            listener.onError(device, xmlResponse.statusCode(), errorMessage);
+        });
     }
 
     /**
-     * Clears up the resources.
+     * Elengedi a válaszfigyelőt. A {@link HttpClient} nem igényel explicit lezárást.
+     * A már elindult {@link #sendAsync} hívások befejeződhetnek; ha addig {@code clear()} futott, a figyelő már nem hívódik meg.
      */
     public void clear() {
         responseListener = null;
@@ -91,35 +80,29 @@ public class UPnPExecutor {
         this.responseListener = responseListener;
     }
 
-    private void performXmlRequest(UPnPDevice device, Request xmlRequest) {
-        if (xmlRequest == null)
+    private void performXmlRequest(UPnPDevice device, HttpRequest xmlRequest) {
+        if (xmlRequest == null) {
             return;
+        }
 
-        client.newCall(xmlRequest)
-                .enqueue(new Callback() {
+        CompletableFuture<HttpResponse<String>> future = client.sendAsync(xmlRequest, HttpResponse.BodyHandlers.ofString());
+        future.whenComplete((xmlResponse, throwable) -> {
+            UPnPResponseListener rl = responseListener;
+            if (rl == null) {
+                return;
+            }
+            if (throwable != null) {
+                rl.onError(device, -1, throwable.getMessage());
+                return;
+            }
+            if (xmlResponse.statusCode() == 200 && xmlResponse.body() != null) {
+                parseResponse(device, xmlResponse.body());
+                return;
+            }
 
-                    @Override
-                    public void onResponse(Call call, Response xmlResponse) throws IOException {
-                        ResponseBody xmlBody = xmlResponse.body();
-
-                        if (xmlResponse.code() == 200 && xmlBody != null) {
-                            parseResponse(device, xmlBody.string());
-                            return;
-                        }
-
-                        String errorMessage = "";
-                        if (xmlBody != null)
-                            errorMessage = xmlBody.string();
-
-                        responseListener.onError(device, xmlResponse.code(), errorMessage);
-                    }
-
-                    @Override
-                    public void onFailure(Call call, IOException e) {
-                        responseListener.onError(device, -1, e.getMessage());
-                    }
-
-                });
+            String errorMessage = xmlResponse.body() != null ? xmlResponse.body() : "";
+            rl.onError(device, xmlResponse.statusCode(), errorMessage);
+        });
     }
 
     private UPnPDeviceInformation parseDeviceInformation(UPnPDevice device, String xmlBody) {
@@ -131,26 +114,12 @@ public class UPnPExecutor {
         parser.parse(new OnvifResponse(xmlBody));
     }
 
-    private Request buildUPnPRequest(UPnPDevice device) {
-        return new Request.Builder()
-                .url(device.getLocation())
-                .addHeader("Content-Type", "text/xml; charset=utf-8")
-                .get()
+    private HttpRequest buildUPnPRequest(UPnPDevice device) {
+        return HttpRequest.newBuilder(URI.create(device.getLocation()))
+                .header("Content-Type", "text/xml; charset=utf-8")
+                .GET()
+                .timeout(Duration.ofSeconds(100))
                 .build();
-    }
-
-    private String bodyToString(Request request) {
-
-        try {
-            Request copy = request.newBuilder().build();
-            Buffer buffer = new Buffer();
-            if (copy.body() != null)
-                copy.body().writeTo(buffer);
-            return buffer.readUtf8();
-        } catch (IOException e) {
-            e.printStackTrace();
-            return "";
-        }
     }
 
 }
