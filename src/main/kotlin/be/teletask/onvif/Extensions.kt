@@ -8,8 +8,12 @@ import be.teletask.onvif.models.OnvifMediaProfile
 import be.teletask.onvif.models.OnvifMotionDetection
 import be.teletask.onvif.models.OnvifMotionEvent
 import be.teletask.onvif.models.OnvifEventProperties
+import be.teletask.onvif.requests.OnvifRequest
 import io.reactivex.rxjava3.core.Completable
+import io.reactivex.rxjava3.core.Flowable
 import io.reactivex.rxjava3.core.Single
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 val defaultOnvifManager by lazy { OnvifManager() }
 
@@ -93,12 +97,95 @@ fun OnvifDevice.getAnalyticsEngines(
 ): Single<List<String>> =
     awaitDeviceRequest { om.getAnalyticsEngines(this, it) }
 
-fun OnvifDevice.createPullPointSubscription(
+fun OnvifDevice.createPullPointSubscriptionReference(
     eventFilters: Array<String>? = null,
     initialTerminationTimeSeconds: Int = 60,
     om: OnvifManager = defaultOnvifManager
 ): Single<String> =
     awaitDeviceRequest { om.createPullPointSubscription(this, eventFilters, initialTerminationTimeSeconds, it) }
+
+/**
+ * ONVIF PullPoint subscription + polling Flowable.
+ *
+ * - subscribe esetén: `CreatePullPointSubscription`
+ * - majd: `PullMessages` ciklus (polling), és az események emitálása
+ * - timeout / kapcsolat megszakadás esetén: újracsatlakozás (retry)
+ * - a Flowable leiratkozásakor (`dispose`/`unsubscribe`): ONVIF `Unsubscribe`
+ */
+fun OnvifDevice.createPullPointSubscription(
+    eventFilters: Array<String>? = null,
+    initialTerminationTimeSeconds: Int = 60,
+    messageLimit: Int = 20,
+    pullTimeoutSeconds: Int = 60,
+    retryDelayMillis: Long = 1_000,
+    maxRetryAttempts: Long = Long.MAX_VALUE,
+    om: OnvifManager = defaultOnvifManager
+): Flowable<OnvifMotionEvent> = Flowable.defer {
+    val device = this
+    val currentSubscriptionReference = AtomicReference<String?>(null)
+
+    fun Throwable.isRetryablePullFailure(): Boolean {
+        if (this !is OnvifRequest.OnvifException) return false
+
+        val msg = generateSequence<Throwable>(this) { it.cause }
+            .mapNotNull { it.message }
+            .joinToString(" ")
+            .lowercase()
+
+        val looksLikeTimeout =
+            msg.contains("timed out") ||
+                msg.contains("timeout") ||
+                msg.contains("timedout")
+
+        val looksLikeConnectionFailure =
+            msg.contains("connection reset") ||
+                msg.contains("connection refused") ||
+                msg.contains("broken pipe") ||
+                msg.contains("eof") ||
+                msg.contains("connection aborted") ||
+                (msg.contains("socket") && msg.contains("closed"))
+
+        return looksLikeTimeout || looksLikeConnectionFailure
+    }
+
+    Flowable.defer {
+        createPullPointSubscriptionReference(
+            eventFilters = eventFilters,
+            initialTerminationTimeSeconds = initialTerminationTimeSeconds,
+            om = om
+        )
+            .toFlowable()
+            .flatMap { subscriptionReference ->
+                currentSubscriptionReference.set(subscriptionReference)
+
+                pullMessages(
+                    subscriptionReference = subscriptionReference,
+                    messageLimit = messageLimit,
+                    timeoutSeconds = pullTimeoutSeconds,
+                    om = om
+                )
+                    .toFlowable()
+                    .flatMapIterable { it }
+                    .repeat()
+            }
+    }
+        .retryWhen { errors ->
+            var attempts = 0L
+            errors.flatMap { err ->
+                attempts++
+                if (attempts > maxRetryAttempts || !err.isRetryablePullFailure()) {
+                    return@flatMap Flowable.error(err)
+                }
+                Flowable.timer(retryDelayMillis, TimeUnit.MILLISECONDS)
+            }
+        }
+        .doFinally {
+            currentSubscriptionReference.getAndSet(null)?.let { subscriptionReference ->
+                // Legjobb erőfeszítés: erőforrás felszabadítása leiratkozáskor.
+                om.unsubscribe(device, subscriptionReference, null)
+            }
+        }
+}
 
 fun OnvifDevice.pullMessages(
     subscriptionReference: String,

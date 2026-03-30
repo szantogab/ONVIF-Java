@@ -16,24 +16,22 @@ fun main() {
     val dev = OnvifDevice("192.168.0.142:2020", "smartive", "smartive1")
     val ae = dev.getEventProperties().blockingGet()
 
-    val sub = dev.createPullPointSubscription(
-        arrayOf("tns1:RuleEngine/CellMotionDetector/Motion"),
-        initialTerminationTimeSeconds = 60
-    ).blockingGet()
-    // val sub = dev.createPullPointSubscription(arrayOf("tns1:VideoSource/MotionAlarm"))
+    val disposable = dev.createPullPointSubscription(
+        eventFilters = arrayOf("tns1:RuleEngine/CellMotionDetector/Motion"),
+        initialTerminationTimeSeconds = 60,
+        pullTimeoutSeconds = 2
+    ).subscribe(
+        { event ->
+            println("Event: $event @ " + LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME))
+        },
+        { err ->
+            println("Subscription error: ${err.message}")
+        }
+    )
 
-    val events = mutableListOf<OnvifMotionEvent>()
-
-    for (i in 0..5) {
-        println("Pulling events.." + LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME))
-
-        val newEvents = dev.pullMessages(sub, timeoutSeconds = 60).blockingGet()
-        events.addAll(newEvents)
-        println("Pulled events: " + newEvents.joinToString(separator = "\n") { it.toString() })
-        Thread.sleep(100)
-    }
-
-    dev.unsubscribe(sub).blockingAwait()
+    // Rövid ideig futtassuk, majd leiratkozunk (dispose) - ekkor mennie kell az ONVIF Unsubscribe-nak.
+    Thread.sleep(5_000)
+    disposable.dispose()
 
     val infos = dev.getInformation().blockingGet()
     val mediaProfiles = dev.getMediaProfiles().blockingGet()

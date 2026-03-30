@@ -4,6 +4,7 @@ import be.teletask.onvif.listeners.OnvifResponseListener;
 import be.teletask.onvif.models.*;
 import be.teletask.onvif.requests.*;
 import be.teletask.onvif.responses.OnvifResponse;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -201,7 +202,7 @@ public class OnvifManager implements OnvifResponseListener {
      * @param subscriptionReference A CreatePullPointSubscription válaszában kapott Address URL
      * @param listener              válasz listener
      */
-    public void unsubscribe(OnvifDevice device, String subscriptionReference, OnvifRequest.Listener<Void> listener) {
+    public void unsubscribe(OnvifDevice device, String subscriptionReference, @Nullable OnvifRequest.Listener<Void> listener) {
         final UnsubscribeRequest request = new UnsubscribeRequest(subscriptionReference, listener);
         executor.sendRequest(device, request);
     }
