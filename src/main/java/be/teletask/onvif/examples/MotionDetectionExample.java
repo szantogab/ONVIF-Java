@@ -210,13 +210,14 @@ public class MotionDetectionExample implements OnvifMotionDetectionListener, Onv
         // Eszköz beállítása (példa)
         example.device = new OnvifDevice("192.168.0.119", "smartive", "smartive1");
 
-        example.onvifManager.getMediaProfiles(example.device, new OnvifRequest.Listener<List<OnvifMediaProfile>>() {
+
+        example.onvifManager.getMediaProfiles(example.device, new OnvifRequest.Listener<>() {
             @Override
             public void onSuccess(OnvifDevice device, List<OnvifMediaProfile> data) {
-                example.onvifManager.getMediaSnapshotURI(example.device, data.get(0), new OnvifRequest.Listener<String>() {
+                example.onvifManager.getMediaSnapshotURI(example.device, data.get(0), new OnvifRequest.Listener<>() {
                     @Override
                     public void onSuccess(OnvifDevice device, String data) {
-                        example.onvifManager.getMediaSnapshot(example.device, data, 5, new OnvifRequest.Listener<byte[]>() {
+                        example.onvifManager.getMediaSnapshot(example.device, data, 5, new OnvifRequest.Listener<>() {
                             @Override
                             public void onSuccess(OnvifDevice device, byte[] data) {
                                 System.out.println("Obtained media snapshot.");

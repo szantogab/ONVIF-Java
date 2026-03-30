@@ -1,79 +1,143 @@
 package be.teletask.onvif
 
-import be.teletask.onvif.coroutines.*
+import be.teletask.onvif.rxjava.awaitDeviceRequest
+import be.teletask.onvif.rxjava.awaitDeviceRequestCompletable
 import be.teletask.onvif.models.OnvifDevice
 import be.teletask.onvif.models.OnvifDeviceInformation
 import be.teletask.onvif.models.OnvifMediaProfile
 import be.teletask.onvif.models.OnvifMotionDetection
 import be.teletask.onvif.models.OnvifMotionEvent
 import be.teletask.onvif.models.OnvifEventProperties
+import io.reactivex.rxjava3.core.Completable
+import io.reactivex.rxjava3.core.Single
 
 val defaultOnvifManager by lazy { OnvifManager() }
 
-suspend fun OnvifDevice.getInformation(om: OnvifManager = defaultOnvifManager) = awaitDeviceRequest<OnvifDeviceInformation> { om.getDeviceInformation(this, it) }
+fun OnvifDevice.getInformation(om: OnvifManager = defaultOnvifManager): Single<OnvifDeviceInformation> =
+    awaitDeviceRequest { om.getDeviceInformation(this, it) }
 
-suspend fun OnvifDevice.getMediaProfiles(om: OnvifManager = defaultOnvifManager) = awaitDeviceRequest<List<OnvifMediaProfile>> { om.getMediaProfiles(this, it) }
 
-suspend fun OnvifDevice.getMediaStreamUri(profile: OnvifMediaProfile, om: OnvifManager = defaultOnvifManager) = awaitDeviceRequest<String> { om.getMediaStreamURI(this, profile, it) }
+fun OnvifDevice.getMediaProfiles(om: OnvifManager = defaultOnvifManager): Single<List<OnvifMediaProfile>> =
+    awaitDeviceRequest { om.getMediaProfiles(this, it) }
 
-suspend fun OnvifDevice.getMediaSnapshotUri(profile: OnvifMediaProfile, om: OnvifManager = defaultOnvifManager) = awaitDeviceRequest<String> { om.getMediaSnapshotURI(this, profile, it) }
+fun OnvifDevice.getMediaStreamUri(
+    profile: OnvifMediaProfile,
+    om: OnvifManager = defaultOnvifManager
+): Single<String> =
+    awaitDeviceRequest { om.getMediaStreamURI(this, profile, it) }
 
-suspend fun OnvifDevice.getMediaSnapshot(snapshotUri: String, timeoutSeconds: Int = 3, om: OnvifManager = defaultOnvifManager) = awaitDeviceRequest<ByteArray> { om.getMediaSnapshot(this, snapshotUri, timeoutSeconds, it) }
+fun OnvifDevice.getMediaSnapshotUri(
+    profile: OnvifMediaProfile,
+    om: OnvifManager = defaultOnvifManager
+): Single<String> =
+    awaitDeviceRequest { om.getMediaSnapshotURI(this, profile, it) }
 
-suspend fun OnvifDevice.ptzContinuousMove(profileToken: String, velocityX: Double, velocityY: Double, velocityZ: Double?, timeout: Int?, om: OnvifManager = defaultOnvifManager) = awaitDeviceRequest<Void> { om.ptzContinuousMove(this, profileToken, velocityX, velocityY, velocityZ, timeout, it) }
+fun OnvifDevice.getMediaSnapshot(
+    snapshotUri: String,
+    timeoutSeconds: Int = 3,
+    om: OnvifManager = defaultOnvifManager
+): Single<ByteArray> =
+    awaitDeviceRequest { om.getMediaSnapshot(this, snapshotUri, timeoutSeconds, it) }
 
-suspend fun OnvifDevice.ptzRelativeMove(profileToken: String, translationX: Double?, translationY: Double?, zoom: Double?, om: OnvifManager = defaultOnvifManager) = awaitDeviceRequest<Void> { om.ptzRelativeMove(this, profileToken, translationX, translationY, zoom, it) }
+fun OnvifDevice.ptzContinuousMove(
+    profileToken: String,
+    velocityX: Double,
+    velocityY: Double,
+    velocityZ: Double?,
+    timeout: Int?,
+    om: OnvifManager = defaultOnvifManager
+): Completable =
+    awaitDeviceRequestCompletable { om.ptzContinuousMove(this, profileToken, velocityX, velocityY, velocityZ, timeout, it) }
 
-suspend fun OnvifDevice.ptzAbsoluteMove(profileToken: String, positionX: Double?, positionY: Double?, zoom: Double?, om: OnvifManager = defaultOnvifManager) = awaitDeviceRequest<Void> { om.ptzAbsoluteMove(this, profileToken, positionX, positionY, zoom, it) }
+fun OnvifDevice.ptzRelativeMove(
+    profileToken: String,
+    translationX: Double?,
+    translationY: Double?,
+    zoom: Double?,
+    om: OnvifManager = defaultOnvifManager
+): Completable =
+    awaitDeviceRequestCompletable { om.ptzRelativeMove(this, profileToken, translationX, translationY, zoom, it) }
 
-suspend fun OnvifDevice.ptzStop(profileToken: String, panTilt: Boolean = true, zoom: Boolean = true, om: OnvifManager = defaultOnvifManager) = awaitDeviceRequest<Void> { om.ptzStop(this, profileToken, panTilt, zoom, it) }
+fun OnvifDevice.ptzAbsoluteMove(
+    profileToken: String,
+    positionX: Double?,
+    positionY: Double?,
+    zoom: Double?,
+    om: OnvifManager = defaultOnvifManager
+): Completable =
+    awaitDeviceRequestCompletable { om.ptzAbsoluteMove(this, profileToken, positionX, positionY, zoom, it) }
+
+fun OnvifDevice.ptzStop(
+    profileToken: String,
+    panTilt: Boolean = true,
+    zoom: Boolean = true,
+    om: OnvifManager = defaultOnvifManager
+): Completable =
+    awaitDeviceRequestCompletable { om.ptzStop(this, profileToken, panTilt, zoom, it) }
 
 // Motion detection extensions
 
-suspend fun OnvifDevice.getMotionDetectionConfiguration(om: OnvifManager = defaultOnvifManager) =
-    awaitDeviceRequest<OnvifMotionDetection> { om.getMotionDetectionConfiguration(this, it) }
+fun OnvifDevice.getMotionDetectionConfiguration(
+    om: OnvifManager = defaultOnvifManager
+): Single<OnvifMotionDetection> =
+    awaitDeviceRequest { om.getMotionDetectionConfiguration(this, it) }
 
-suspend fun OnvifDevice.setMotionDetectionConfiguration(
+fun OnvifDevice.setMotionDetectionConfiguration(
     motionDetection: OnvifMotionDetection,
     om: OnvifManager = defaultOnvifManager
-) = awaitDeviceRequest<Void> { om.setMotionDetectionConfiguration(this, motionDetection, it) }
+): Completable =
+    awaitDeviceRequestCompletable { om.setMotionDetectionConfiguration(this, motionDetection, it) }
 
-suspend fun OnvifDevice.getAnalyticsEngines(om: OnvifManager = defaultOnvifManager) =
-    awaitDeviceRequest<List<String>> { om.getAnalyticsEngines(this, it) }
+fun OnvifDevice.getAnalyticsEngines(
+    om: OnvifManager = defaultOnvifManager
+): Single<List<String>> =
+    awaitDeviceRequest { om.getAnalyticsEngines(this, it) }
 
-suspend fun OnvifDevice.createPullPointSubscription(eventFilters: Array<String>? = null, initialTerminationTimeSeconds: Int = 60, om: OnvifManager = defaultOnvifManager) =
-    awaitDeviceRequest<String> { om.createPullPointSubscription(this, eventFilters, initialTerminationTimeSeconds, it) }
+fun OnvifDevice.createPullPointSubscription(
+    eventFilters: Array<String>? = null,
+    initialTerminationTimeSeconds: Int = 60,
+    om: OnvifManager = defaultOnvifManager
+): Single<String> =
+    awaitDeviceRequest { om.createPullPointSubscription(this, eventFilters, initialTerminationTimeSeconds, it) }
 
-suspend fun OnvifDevice.pullMessages(
+fun OnvifDevice.pullMessages(
     subscriptionReference: String,
     messageLimit: Int = 20,
     timeoutSeconds: Int = 60,
     om: OnvifManager = defaultOnvifManager
-) = awaitDeviceRequest<List<OnvifMotionEvent>> { om.pullMessages(this, subscriptionReference, messageLimit, timeoutSeconds,it) }
+): Single<List<OnvifMotionEvent>> =
+    awaitDeviceRequest { om.pullMessages(this, subscriptionReference, messageLimit, timeoutSeconds, it) }
 
 // Events – GetEventProperties
 
-suspend fun OnvifDevice.getEventProperties(om: OnvifManager = defaultOnvifManager) =
-    awaitDeviceRequest<OnvifEventProperties> { om.getEventProperties(this, it) }
+fun OnvifDevice.getEventProperties(
+    om: OnvifManager = defaultOnvifManager
+): Single<OnvifEventProperties> =
+    awaitDeviceRequest { om.getEventProperties(this, it) }
 
 // Event Broker extensions
 
-suspend fun OnvifDevice.addEventBroker(
+fun OnvifDevice.addEventBroker(
     brokerAddress: String,
     om: OnvifManager = defaultOnvifManager
-) = awaitDeviceRequest<Void> { om.addEventBroker(this, brokerAddress, it) }
+): Completable =
+    awaitDeviceRequestCompletable { om.addEventBroker(this, brokerAddress, it) }
 
-suspend fun OnvifDevice.deleteEventBroker(
+fun OnvifDevice.deleteEventBroker(
     brokerToken: String,
     om: OnvifManager = defaultOnvifManager
-) = awaitDeviceRequest<Void> { om.deleteEventBroker(this, brokerToken, it) }
+): Completable =
+    awaitDeviceRequestCompletable { om.deleteEventBroker(this, brokerToken, it) }
 
-suspend fun OnvifDevice.getEventBrokers(om: OnvifManager = defaultOnvifManager) =
-    awaitDeviceRequest<List<String>> { om.getEventBrokers(this, it) }
+fun OnvifDevice.getEventBrokers(
+    om: OnvifManager = defaultOnvifManager
+): Single<List<String>> =
+    awaitDeviceRequest { om.getEventBrokers(this, it) }
 
 // Unsubscribe extension
 
-suspend fun OnvifDevice.unsubscribe(
+fun OnvifDevice.unsubscribe(
     subscriptionReference: String,
     om: OnvifManager = defaultOnvifManager
-) = awaitDeviceRequest<Void> { om.unsubscribe(this, subscriptionReference, it) }
+): Completable =
+    awaitDeviceRequestCompletable { om.unsubscribe(this, subscriptionReference, it) }
