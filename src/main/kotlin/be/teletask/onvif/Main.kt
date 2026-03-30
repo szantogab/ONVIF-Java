@@ -13,7 +13,18 @@ fun main() {
     }.blockingGet().filterIsInstance<OnvifDevice>()
 
     /*val dev = onvifDevices.first()*/
-    val dev = OnvifDevice("192.168.0.142:2020", "smartive", "smartive1")
+    val dev = OnvifDevice("192.168.0.119", "smartive", "smartive1")
+  //  val infos = dev.getInformation().blockingGet()
+    val mediaProfiles = dev.getMediaProfiles().blockingGet()
+    val snapshotUri = dev.getMediaSnapshotUri(mediaProfiles.first()).blockingGet()
+
+    for (i in 1..100) {
+        dev.getMediaSnapshot(snapshotUri).blockingGet()
+        println("Getting snapshot: $i...")
+
+        Thread.sleep(100)
+    }
+
     val ae = dev.getEventProperties().blockingGet()
 
     val disposable = dev.createPullPointSubscription(
@@ -32,10 +43,6 @@ fun main() {
     // Rövid ideig futtassuk, majd leiratkozunk (dispose) - ekkor mennie kell az ONVIF Unsubscribe-nak.
     Thread.sleep(5_000)
     disposable.dispose()
-
-    val infos = dev.getInformation().blockingGet()
-    val mediaProfiles = dev.getMediaProfiles().blockingGet()
-    val snapshotUri = dev.getMediaSnapshotUri(mediaProfiles.first()).blockingGet()
 
     dev.ptzContinuousMove(mediaProfiles.first().token, -1.0, 1.0, null, 1).blockingAwait()
     dev.ptzRelativeMove(mediaProfiles.first().token, 0.1, 0.0, null).blockingAwait()

@@ -44,7 +44,7 @@ public class OnvifExecutor {
     //Methods
 
     <T> void sendRequest(OnvifDevice device, OnvifRequest<T> request) {
-        sendRequest(device, request, 5);
+        sendRequest(device, request, 10);
     }
 
     /**

@@ -6,10 +6,14 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -25,8 +29,21 @@ public final class HttpDigest {
 
     private static final Pattern DIGEST_PARAM = Pattern.compile("(\\w+)=((?:\"([^\"]*)\")|([^,]+))");
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final ConcurrentMap<String, DigestState> DIGEST_STATE = new ConcurrentHashMap<>();
 
     private HttpDigest() {
+    }
+
+    private static final class DigestState {
+        final String nonce;
+        final String cnonce;
+        final AtomicInteger nc;
+
+        DigestState(String nonce, String cnonce, int startNc) {
+            this.nonce = nonce;
+            this.cnonce = cnonce;
+            this.nc = new AtomicInteger(startNc);
+        }
     }
 
     public static HttpResponse<String> execute(
@@ -41,28 +58,26 @@ public final class HttpDigest {
 
         HttpRequest request = buildRequest(method, uri, headers, body, timeout, null);
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
         if (response.statusCode() != 401 || username == null || username.isEmpty()) {
             return response;
         }
 
-        String authHeader = findDigestChallenge(response.headers());
-        if (authHeader == null) {
-            return response;
-        }
-
-        Map<String, String> params = parseDigestChallenge(authHeader);
-        if (params.isEmpty()) {
-            return response;
-        }
-
-        String authorization = buildAuthorizationHeader(method, uri, username, password == null ? "" : password, params);
+        String safePassword = password == null ? "" : password;
+        // A többlépcsős (3x) retry ideiglenesen kikapcsolva.
+        // Egyszer próbálkozunk hitelesített kéréssel a 401 challenge alapján.
+        String authorization = buildAuthorizationFromChallenge(
+                method,
+                uri,
+                username,
+                safePassword,
+                response.headers()
+        );
         if (authorization == null) {
             return response;
         }
-
         HttpRequest retry = buildRequest(method, uri, headers, body, timeout, authorization);
-        return client.send(retry, HttpResponse.BodyHandlers.ofString());
+        response = client.send(retry, HttpResponse.BodyHandlers.ofString());
+        return response;
     }
 
     /**
@@ -80,28 +95,26 @@ public final class HttpDigest {
 
         HttpRequest request = buildRequest(method, uri, headers, body, timeout, null);
         HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
-
         if (response.statusCode() != 401 || username == null || username.isEmpty()) {
             return response;
         }
 
-        String authHeader = findDigestChallenge(response.headers());
-        if (authHeader == null) {
-            return response;
-        }
-
-        Map<String, String> params = parseDigestChallenge(authHeader);
-        if (params.isEmpty()) {
-            return response;
-        }
-
-        String authorization = buildAuthorizationHeader(method, uri, username, password == null ? "" : password, params);
+        String safePassword = password == null ? "" : password;
+        // A többlépcsős (3x) retry ideiglenesen kikapcsolva.
+        // Egyszer próbálkozunk hitelesített kéréssel a 401 challenge alapján.
+        String authorization = buildAuthorizationFromChallenge(
+                method,
+                uri,
+                username,
+                safePassword,
+                response.headers()
+        );
         if (authorization == null) {
             return response;
         }
-
         HttpRequest retry = buildRequest(method, uri, headers, body, timeout, authorization);
-        return client.send(retry, HttpResponse.BodyHandlers.ofByteArray());
+        response = client.send(retry, HttpResponse.BodyHandlers.ofByteArray());
+        return response;
     }
 
     private static HttpRequest buildRequest(
@@ -131,10 +144,37 @@ public final class HttpDigest {
         return b.build();
     }
 
-    private static String findDigestChallenge(java.net.http.HttpHeaders headers) {
+    private static String buildAuthorizationFromChallenge(
+            String method,
+            URI uri,
+            String username,
+            String password,
+            java.net.http.HttpHeaders headers) {
+        String digestChallenge = findAuthChallenge(headers, "Digest");
+        if (digestChallenge != null) {
+            Map<String, String> params = parseDigestChallenge(digestChallenge);
+            if (!params.isEmpty()) {
+                String digestAuthorization = buildAuthorizationHeader(method, uri, username, password, params);
+                if (digestAuthorization != null) {
+                    return digestAuthorization;
+                }
+            }
+        }
+
+        String basicChallenge = findAuthChallenge(headers, "Basic");
+        if (basicChallenge != null) {
+            String credentials = username + ":" + password;
+            String encoded = Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
+            return "Basic " + encoded;
+        }
+
+        return null;
+    }
+
+    private static String findAuthChallenge(java.net.http.HttpHeaders headers, String scheme) {
         List<String> values = headers.allValues("WWW-Authenticate");
         for (String v : values) {
-            if (v != null && v.trim().regionMatches(true, 0, "Digest", 0, 6)) {
+            if (v != null && v.trim().regionMatches(true, 0, scheme, 0, scheme.length())) {
                 return v;
             }
         }
@@ -174,21 +214,19 @@ public final class HttpDigest {
 
         String qop = challenge.get("qop");
         String opaque = challenge.get("opaque");
-        String algorithm = challenge.getOrDefault("algorithm", "MD5");
-
-        if (!algorithm.toUpperCase(Locale.ROOT).startsWith("MD5")) {
+        String algorithm = challenge.getOrDefault("algorithm", "MD5").trim();
+        String algorithmUpper = algorithm.toUpperCase(Locale.ROOT);
+        boolean md5 = "MD5".equals(algorithmUpper);
+        boolean md5Sess = "MD5-SESS".equals(algorithmUpper);
+        if (!md5 && !md5Sess) {
             return null;
         }
 
         String digestUri = digestUri(uri);
-        String ha1 = md5Hex(username + ":" + realm + ":" + password);
         String ha2 = md5Hex(method.toUpperCase(Locale.ROOT) + ":" + digestUri);
 
         String responseDigest;
-        String nc = "00000001";
-        byte[] cnonceBytes = new byte[8];
-        SECURE_RANDOM.nextBytes(cnonceBytes);
-        String cnonce = toHex(cnonceBytes);
+        String stale = challenge.get("stale");
 
         boolean qopAuth = false;
         if (qop != null) {
@@ -201,6 +239,26 @@ public final class HttpDigest {
         }
 
         if (qopAuth) {
+            String stateKey = digestStateKey(uri, username, realm);
+            boolean isStale = stale != null && "true".equalsIgnoreCase(stale.trim().replace("\"", ""));
+            DigestState state = DIGEST_STATE.compute(stateKey, (k, existing) -> {
+                if (isStale || existing == null || !nonce.equals(existing.nonce)) {
+                    byte[] cnonceBytes = new byte[8];
+                    SECURE_RANDOM.nextBytes(cnonceBytes);
+                    return new DigestState(nonce, toHex(cnonceBytes), 1);
+                }
+                return existing;
+            });
+            int ncInt = state.nc.getAndIncrement();
+            String nc = String.format(Locale.ROOT, "%08x", ncInt);
+            String cnonce = state.cnonce;
+
+            String ha1 = md5Hex(username + ":" + realm + ":" + password);
+            if (md5Sess) {
+                // RFC 2617: HA1 = MD5( MD5(username:realm:password) : nonce : cnonce )
+                ha1 = md5Hex(ha1 + ":" + nonce + ":" + cnonce);
+            }
+
             String qopToken = "auth";
             responseDigest = md5Hex(ha1 + ":" + nonce + ":" + nc + ":" + cnonce + ":" + qopToken + ":" + ha2);
             StringBuilder sb = new StringBuilder(256);
@@ -215,10 +273,11 @@ public final class HttpDigest {
             if (opaque != null) {
                 sb.append(", opaque=\"").append(escapeQuoted(opaque)).append("\"");
             }
-            sb.append(", algorithm=MD5");
+            sb.append(", algorithm=").append(algorithmUpper);
             return sb.toString();
         }
 
+        String ha1 = md5Hex(username + ":" + realm + ":" + password);
         responseDigest = md5Hex(ha1 + ":" + nonce + ":" + ha2);
         StringBuilder sb = new StringBuilder(256);
         sb.append("Digest username=\"").append(escapeQuoted(username))
@@ -229,8 +288,15 @@ public final class HttpDigest {
         if (opaque != null) {
             sb.append(", opaque=\"").append(escapeQuoted(opaque)).append("\"");
         }
-        sb.append(", algorithm=MD5");
+        sb.append(", algorithm=").append(algorithmUpper);
         return sb.toString();
+    }
+
+    private static String digestStateKey(URI uri, String username, String realm) {
+        String host = uri.getHost() != null ? uri.getHost() : "";
+        int port = uri.getPort();
+        String hostPort = port > 0 ? host + ":" + port : host;
+        return hostPort + "|" + realm + "|" + username;
     }
 
     private static String escapeQuoted(String s) {
