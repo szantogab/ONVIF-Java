@@ -129,13 +129,11 @@ public class OnvifManager implements OnvifResponseListener {
     }
 
     /**
-     * Létrehoz egy pull point subscription-t mozgásérzékelési eseményekhez
-     * @param device ONVIF eszköz
-     * @param listener válasz listener
+     * Létrehoz egy pull point subscription-t mozgásérzékelési eseményekhez.
      */
-    public void createPullPointSubscription(OnvifDevice device, String[] eventFilters, int initialTerminationTimeSeconds,  OnvifRequest.Listener<String> listener) {
+    public void createPullPointSubscription(OnvifDevice device, String[] eventFilters, int initialTerminationTimeSeconds, OnvifRequest.Listener<String> listener) {
         final CreatePullPointSubscriptionRequest request = new CreatePullPointSubscriptionRequest(listener, eventFilters, initialTerminationTimeSeconds);
-        executor.sendRequest(device, request);
+        executor.sendRequest(device, request, initialTerminationTimeSeconds);
     }
 
     /**

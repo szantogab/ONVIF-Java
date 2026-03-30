@@ -14,12 +14,29 @@ fun main() {
 
     /*val dev = onvifDevices.first()*/
     val dev = OnvifDevice("192.168.0.142:2020", "smartive", "smartive1")
+  //  val infos = dev.getInformation().blockingGet()
+    val mediaProfiles = dev.getMediaProfiles().blockingGet()
+   /* val snapshotUri = dev.getMediaSnapshotUri(mediaProfiles.first()).blockingGet()
+
+    for (i in 1..100) {
+        dev.getMediaSnapshot(snapshotUri).blockingGet()
+        println("Getting snapshot: $i...")
+
+        Thread.sleep(100)
+    }*/
+
+    /*dev.ptzContinuousMove(mediaProfiles.first().token, -1.0, 1.0, null, 1).blockingAwait()
+    dev.ptzRelativeMove(mediaProfiles.first().token, 0.1, 0.0, null).blockingAwait()
+    dev.ptzAbsoluteMove(mediaProfiles.first().token, 0.1, 0.0, 1.0).blockingAwait()
+    dev.ptzStop(mediaProfiles.first().token).blockingAwait()*/
+
     val ae = dev.getEventProperties().blockingGet()
 
     val disposable = dev.createPullPointSubscription(
-        eventFilters = arrayOf("tns1:RuleEngine/CellMotionDetector/Motion"),
+        /*eventFilters = arrayOf("tns1:RuleEngine/CellMotionDetector/Motion"),*/
         initialTerminationTimeSeconds = 60,
-        pullTimeoutSeconds = 2
+        // pullTimeoutSeconds: egy PullMessages hívás HTTP timeoutja
+        pullTimeoutSeconds = 10,
     ).subscribe(
         { event ->
             println("Event: $event @ " + LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME))
@@ -30,17 +47,10 @@ fun main() {
     )
 
     // Rövid ideig futtassuk, majd leiratkozunk (dispose) - ekkor mennie kell az ONVIF Unsubscribe-nak.
-    Thread.sleep(5_000)
+    Thread.sleep(20000)
     disposable.dispose()
 
-    val infos = dev.getInformation().blockingGet()
-    val mediaProfiles = dev.getMediaProfiles().blockingGet()
-    val snapshotUri = dev.getMediaSnapshotUri(mediaProfiles.first()).blockingGet()
 
-    dev.ptzContinuousMove(mediaProfiles.first().token, -1.0, 1.0, null, 1).blockingAwait()
-    dev.ptzRelativeMove(mediaProfiles.first().token, 0.1, 0.0, null).blockingAwait()
-    dev.ptzAbsoluteMove(mediaProfiles.first().token, 0.1, 0.0, 1.0).blockingAwait()
-    dev.ptzStop(mediaProfiles.first().token).blockingAwait()
 
     Unit
 }

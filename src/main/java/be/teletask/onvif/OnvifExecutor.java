@@ -44,7 +44,7 @@ public class OnvifExecutor {
     //Methods
 
     <T> void sendRequest(OnvifDevice device, OnvifRequest<T> request) {
-        sendRequest(device, request, 5);
+        sendRequest(device, request, 10);
     }
 
     /**
@@ -211,7 +211,10 @@ public class OnvifExecutor {
                 break;
         }
 
-        response.request().getListener().onSuccess(device, data);
+        OnvifRequest.Listener<T> listener = response.request().getListener();
+        if (listener != null) {
+            listener.onSuccess(device, data);
+        }
     }
 
     private String getUrlForRequest(OnvifDevice device, OnvifRequest<?> request) {

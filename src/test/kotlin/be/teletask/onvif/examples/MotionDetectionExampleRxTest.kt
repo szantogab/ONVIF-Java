@@ -83,11 +83,10 @@ class MotionDetectionExampleRxTest {
 			eventFilters = null,
 			initialTerminationTimeSeconds = 60,
 			messageLimit = 20,
-			// Itt szándékosan kicsit agresszív timeout van, hogy a retry/polling mechanizmust is
-			// érdemben átgyúrjuk integrációs környezetben.
 			pullTimeoutSeconds = 10,
-			retryDelayMillis = 200,
-			maxRetryAttempts = 100,
+			// Integrációs teszt: gyors külső retry (régi minta: retryWhen delay)
+			retryDelaySeconds = 0,
+			pullRepeatDelayMillis = 200,
 			om = manager
 		).subscribe(
 			{ event ->
@@ -102,7 +101,7 @@ class MotionDetectionExampleRxTest {
 
 		try {
 			// Adj időt a PullMessages ciklusnak (és a lehetséges retry-nak) pár kör lefutására.
-			val deadlineMs = System.nanoTime() + TimeUnit.SECONDS.toNanos(1000)
+			val deadlineMs = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
 			while (System.nanoTime() < deadlineMs && errorRef.get() == null) {
 				Thread.sleep(100)
 			}
