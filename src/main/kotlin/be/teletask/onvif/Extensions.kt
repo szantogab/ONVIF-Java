@@ -67,29 +67,39 @@ fun OnvifDevice.createPullPointSubscription(
 	initialTerminationTimeSeconds: Int = 60,
 	messageLimit: Int = 20,
 	pullTimeoutSeconds: Int = 60,
-	/** Külső `retryWhen`: két teljes újracsatlakozás között (régi: `delay(5, SECONDS)`). */
+	/** Delay between full resubscribe attempts after terminal errors. */
 	retryDelaySeconds: Long = 5,
-	/** Belső `repeatWhen`: két `pullMessages` között (régi: `delay(10, MILLISECONDS)`). */
-	pullRepeatDelayMillis: Long = 10,
+	/** Delay between consecutive pullMessages cycles. */
+	pullRepeatDelayMillis: Long = 1000,
 	om: OnvifManager = defaultOnvifManager,
+	timerScheduler: io.reactivex.rxjava3.core.Scheduler = Schedulers.io(),
 ): Flowable<OnvifMotionEvent> {
 	val device = this
 
-	val motionSubscribe = Flowable.defer {
+	return Flowable.defer {
 		createPullPointSubscriptionReference(
 				eventFilters = eventFilters,
 				initialTerminationTimeSeconds = initialTerminationTimeSeconds,
 				om = om,
 		).toFlowable()
-	}
-
-	return motionSubscribe.switchMap { subscriptionAddress ->
-		pullMessages(subscriptionReference = subscriptionAddress, messageLimit = messageLimit, timeoutSeconds = pullTimeoutSeconds, om = om)
+	}.switchMap { subscriptionAddress ->
+		pullMessages(
+				subscriptionReference = subscriptionAddress,
+				messageLimit = messageLimit,
+				timeoutSeconds = pullTimeoutSeconds,
+				om = om,
+		)
 			.toFlowable()
-			.flatMapIterable { it }
-			.repeatWhen { it.delay(pullRepeatDelayMillis, TimeUnit.MILLISECONDS, Schedulers.io()) }
-			.doFinally { om.unsubscribe(device, subscriptionAddress, null) }
-	}.retryWhen { errors -> errors.delay(retryDelaySeconds, TimeUnit.SECONDS, Schedulers.io()) }.subscribeOn(Schedulers.io())
+			.concatMapIterable { it } // lower churn than flatMapIterable for this ordered stream
+			.repeatWhen { completed ->
+				completed.delay(pullRepeatDelayMillis, TimeUnit.MILLISECONDS, timerScheduler)
+			}
+			.doFinally {
+				om.unsubscribe(device, subscriptionAddress, null)
+			}
+	}.retryWhen { errors ->
+		errors.delay(retryDelaySeconds, TimeUnit.SECONDS, timerScheduler)
+	}
 }
 
 fun OnvifDevice.pullMessages(subscriptionReference: String, messageLimit: Int = 20, timeoutSeconds: Int = 60, om: OnvifManager = defaultOnvifManager): Single<List<OnvifMotionEvent>> = awaitDeviceRequest { om.pullMessages(this, subscriptionReference, messageLimit, timeoutSeconds, it) }

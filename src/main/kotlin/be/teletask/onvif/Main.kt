@@ -13,7 +13,7 @@ fun main() {
     }.blockingGet().filterIsInstance<OnvifDevice>()
 
     /*val dev = onvifDevices.first()*/
-    val dev = OnvifDevice("192.168.0.142:2020", "smartive", "smartive1")
+    val dev = OnvifDevice("192.168.0.119", "smartive", "smartive1")
   //  val infos = dev.getInformation().blockingGet()
     val mediaProfiles = dev.getMediaProfiles().blockingGet()
    /* val snapshotUri = dev.getMediaSnapshotUri(mediaProfiles.first()).blockingGet()
