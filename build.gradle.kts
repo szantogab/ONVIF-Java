@@ -19,7 +19,7 @@ repositories {
 }
 
 group = "com.github.szantogab"
-version = "1.1.20"
+version = "1.1.21"
 
 dependencies {
     implementation(kotlin("stdlib"))
