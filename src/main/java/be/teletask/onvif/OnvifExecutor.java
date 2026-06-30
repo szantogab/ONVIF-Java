@@ -177,6 +177,9 @@ public class OnvifExecutor {
             case GET_MEDIA_PROFILES:
                 data = (T) new GetMediaProfilesParser().parse(response);
                 break;
+            case GET_AUDIO_OUTPUTS:
+                data = (T) new GetAudioOutputsParser().parse(response);
+                break;
             case GET_STREAM_URI:
             case GET_SNAPSHOT_URI:
                 data = (T) new GetMediaStreamParser().parse(response);
@@ -242,6 +245,7 @@ public class OnvifExecutor {
             case GET_DEVICE_INFORMATION:
                 return device.getPath().getDeviceInformationPath();
             case GET_MEDIA_PROFILES:
+            case GET_AUDIO_OUTPUTS:
                 return device.getPath().getProfilesPath();
             case GET_STREAM_URI:
                 return device.getPath().getStreamURIPath();

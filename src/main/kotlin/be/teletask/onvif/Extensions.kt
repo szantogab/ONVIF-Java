@@ -17,6 +17,8 @@ fun OnvifDevice.getInformation(om: OnvifManager = defaultOnvifManager): Single<O
 
 fun OnvifDevice.getMediaProfiles(om: OnvifManager = defaultOnvifManager): Single<List<OnvifMediaProfile>> = awaitDeviceRequest { om.getMediaProfiles(this, it) }
 
+fun OnvifDevice.getAudioOutputs(om: OnvifManager = defaultOnvifManager): Single<List<OnvifAudioOutput>> = awaitDeviceRequest { om.getAudioOutputs(this, it) }
+
 fun OnvifDevice.getMediaStreamUri(profile: OnvifMediaProfile, om: OnvifManager = defaultOnvifManager): Single<String> = awaitDeviceRequest { om.getMediaStreamURI(this, profile, it) }
 
 fun OnvifDevice.getMediaSnapshotUri(profile: OnvifMediaProfile, om: OnvifManager = defaultOnvifManager): Single<String> = awaitDeviceRequest { om.getMediaSnapshotURI(this, profile, it) }

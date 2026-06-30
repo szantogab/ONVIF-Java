@@ -48,6 +48,11 @@ public class OnvifManager implements OnvifResponseListener {
         executor.sendRequest(device, request);
     }
 
+    public void getAudioOutputs(OnvifDevice device, OnvifRequest.Listener<List<OnvifAudioOutput>> listener) {
+        final GetAudioOutputsRequest request = new GetAudioOutputsRequest(listener);
+        executor.sendRequest(device, request);
+    }
+
     public void getMediaStreamURI(OnvifDevice device, OnvifMediaProfile profile, OnvifRequest.Listener<String> listener) {
         final GetMediaStreamRequest request = new GetMediaStreamRequest(profile, listener);
         executor.sendRequest(device, request);
